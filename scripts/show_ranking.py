@@ -66,7 +66,10 @@ def print_ranking(scored: pd.DataFrame, title: str, profile: str) -> None:
 
         print(f"\n#{rank}  {cohort_tag:<9s} {row.code}  {row.name}  ({row.state})")
         composite_str = "n/a" if pd.isna(row.composite) else f"{row.composite:5.1f}"
-        print(f"    composite:  {composite_str}   confidence: {row.confidence:.2f}")
+        print(
+            f"    composite:  {composite_str}   confidence: {row.confidence['value']:.2f} "
+            f"({row.confidence['reason']})"
+        )
         print(
             "    pillars:    "
             + "  ".join(f"{p}={format_pillar(v)}" for p, v in pillar_values.items())

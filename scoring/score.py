@@ -68,6 +68,38 @@ def compute_composite(pillar_df: pd.DataFrame, profile_weights: dict) -> pd.Seri
     return pillar_df.apply(row_composite, axis=1)
 
 
+def _confidence_reason(
+    pctile_isna_row: pd.Series,
+    reporting_carrier_count: float,
+    full_carriers: int,
+    departures_performed: float,
+    full_departures: int,
+) -> str:
+    """One human-readable sentence naming the single biggest driver of a
+    low confidence score, in a fixed priority order (missing OTP entirely
+    is a bigger problem than a thin-but-present OTP match, which is bigger
+    than low T-100 volume, which is bigger than one missing feasibility
+    metric). The agent surfaces this text directly (CLAUDE.md: every tool
+    payload carries `confidence`) -- it is built from data by this
+    function, never composed or estimated by the language model.
+    """
+    if pd.isna(reporting_carrier_count):
+        return "no OTP match for May 2026"
+    if reporting_carrier_count < full_carriers:
+        count = int(reporting_carrier_count)
+        return f"only {count} reporting carrier{'' if count == 1 else 's'}"
+    if departures_performed < full_departures:
+        return f"only {int(departures_performed):,} departures in May 2026"
+
+    missing_metrics = [
+        col[: -len("_pctile")] for col, is_na in pctile_isna_row.items() if is_na
+    ]
+    if missing_metrics:
+        return f"missing {', '.join(missing_metrics)}"
+
+    return "full metric coverage, high volume, sufficient carrier diversity"
+
+
 def compute_confidence(pctile_df: pd.DataFrame, metrics_df: pd.DataFrame, confidence_config: dict) -> pd.Series:
     """Per-airport confidence: a weighted blend of three independent
     reliability signals (see config/weights.yaml's `confidence` section for
@@ -95,6 +127,12 @@ def compute_confidence(pctile_df: pd.DataFrame, metrics_df: pd.DataFrame, confid
     confidence, not a fabricated metric value: capacity_strain itself stays
     NaN for those airports (see scoring/metrics.py's join_ontime) and is
     never imputed from this.
+
+    Returns a Series of {"value": float, "reason": str} dicts, one per
+    airport -- not a bare float. `reason` names the single biggest driver
+    of that airport's score (see _confidence_reason) so the agent can
+    surface it verbatim instead of the model having to interpret or
+    describe a number itself.
     """
     total_metrics = pctile_df.shape[1]
     metric_coverage = pctile_df.notna().sum(axis=1) / total_metrics
@@ -110,9 +148,29 @@ def compute_confidence(pctile_df: pd.DataFrame, metrics_df: pd.DataFrame, confid
     w_cov = confidence_config["metric_coverage_weight"]
     w_vol = confidence_config["volume_weight"]
     w_carrier = confidence_config["carrier_diversity_weight"]
-    return (
+    value = (
         w_cov * metric_coverage + w_vol * sample_volume + w_carrier * carrier_diversity
     ).round(2)
+
+    pctile_isna = pctile_df.isna()
+    reason = pd.Series(
+        [
+            _confidence_reason(
+                pctile_isna.loc[idx],
+                metrics_df.loc[idx, "reporting_carrier_count"],
+                full_carriers,
+                metrics_df.loc[idx, "departures_performed"],
+                full_departures,
+            )
+            for idx in metrics_df.index
+        ],
+        index=metrics_df.index,
+    )
+
+    return pd.Series(
+        [{"value": v, "reason": r} for v, r in zip(value, reason)],
+        index=metrics_df.index,
+    )
 
 
 def score_airports(metrics_df: pd.DataFrame, weights_config: dict, profile: str) -> pd.DataFrame:
