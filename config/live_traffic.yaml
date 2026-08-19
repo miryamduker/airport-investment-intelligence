@@ -1,0 +1,16 @@
+# Settings for live_traffic_snapshot (tools/traffic.py) -- the only tool that
+# leaves the cached May 2026 dataset. It calls OpenSky's anonymous public API
+# (no key, no new dependency) and its output is illustrative: never read by
+# scoring, never persisted, never part of a ranking.
+
+opensky_states_url: "https://opensky-network.org/api/states/all"
+
+# Bounding-box half-width in degrees around the airport's coordinates. ~0.15
+# is roughly 10-15nm at US latitudes: wide enough to catch aircraft on final
+# or initial climb, narrow enough to still mean "near this airport." A coarse
+# geographic filter, not a verified arrival/departure match.
+bbox_half_width_degrees: 0.15
+
+# Anonymous access is rate-limited and sometimes slow. Fail fast and return
+# an honest "unavailable" rather than hanging the agent loop.
+request_timeout_seconds: 8

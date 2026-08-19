@@ -1,12 +1,8 @@
-"""Reproducibility guarantees for scoring/score.py:
+"""The two guarantees scoring/score.py has to keep:
 
-1. Scoring the same input twice produces byte-identical output -- the model
-   never sees or invents a number, so nothing in this pipeline should be
-   nondeterministic either.
-2. Percentiles are computed nationally, never within a region-filtered
-   subset (CLAUDE.md: "Never rank within a filtered subset -- that would
-   make the best airport in any region score 100 by definition"). Region
-   filtering must happen after score_airports returns, not before.
+1. The same input scored twice gives byte-identical output.
+2. Percentiles are national, never computed within a region-filtered subset
+   -- otherwise the best airport in any region scores 100 by definition.
 
 Run:
     python -m pytest tests/test_reproducible.py -v
@@ -68,12 +64,9 @@ def test_region_filter_after_scoring_matches_national(metrics_df, weights_config
     )
     pd.testing.assert_frame_equal(new_england, new_england_again)
 
-    # Regression guard: scoring a region-prefiltered DataFrame ranks
-    # airports against a much smaller hub_size cohort, which produces
-    # DIFFERENT (wrong) percentiles than filtering the nationally-scored
-    # output. If this ever matches the correct national-then-filter result
-    # for every airport, something has silently shrunk the national cohort
-    # down to just this region before ranking.
+    # Scoring a region-prefiltered frame ranks airports against a much
+    # smaller cohort, so it must NOT match the national-then-filter result.
+    # If it ever does, something shrank the cohort before ranking.
     region_only_metrics = (
         metrics_df[metrics_df["region"] == "new_england"].reset_index(drop=True)
     )

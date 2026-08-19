@@ -1,42 +1,27 @@
-# Ingest-time filter/config values. Not scoring thresholds (those live in
-# config/weights.yaml) -- this file holds the categorical values that define
-# "passenger service" at the raw-data layer, confirmed against BTS's own
-# lookup tables during recon (see docs/DATA_RECON.md and ingest/t100.py).
+# Ingest-time filters. Scoring thresholds live in config/weights.yaml; this
+# file defines "passenger service" at the raw-data layer, against BTS's own
+# lookup tables (docs/DATA_RECON.md).
 
 t100_segment:
-  # BTS T-100 Segment CLASS field (BTS lookup table L_SERVICE_CLASS,
-  # https://transtats.bts.gov/Download_Lookup.asp?Y11x72=Y_fReiVPR_PYNff):
-  #   F = Scheduled Passenger/Cargo Service
-  #   L = Non-Scheduled Civilian Passenger/Cargo Service
-  #   G = Scheduled All Cargo Service      (excluded)
-  #   P = Non-Scheduled Civilian All Cargo Service (excluded)
-  # Verified against the December 2025 and May 2026 pulls: G and P carry
-  # ~0 total passengers nationally, confirming they are cargo-only classes.
-  # AIRCRAFT_CONFIG is not used as a hard filter alongside CLASS: rows with
-  # CLASS in (F, L) but AIRCRAFT_CONFIG != 1 (combi/seaplane aircraft) still
-  # carry real passengers (325,517 in the May 2026 pull) and would be wrongly
-  # dropped by an AND filter on both fields.
+  # BTS lookup table L_SERVICE_CLASS: F = Scheduled Passenger/Cargo,
+  # L = Non-Scheduled Civilian Passenger/Cargo. The excluded G and P are the
+  # all-cargo classes, verified to carry ~0 passengers nationally.
+  # AIRCRAFT_CONFIG is deliberately not AND-ed in: 325,517 real passengers
+  # in the May 2026 pull fly on combi/seaplane aircraft it would drop.
   passenger_service_classes: ["F", "L"]
 
-# Hub-size cohort thresholds, applied in ingest/airports.py to each airport's
-# share of national T-100 passengers. FAA's own hub-size classification
-# (49 U.S.C. 47102) uses a full calendar year of enplanements; this build has
-# only one month (May 2026, see docs/DATA_RECON.md), so these shares are a
-# one-month proxy, not an FAA hub-size determination -- noted again at the
-# point of computation in ingest/airports.py.
+# Hub-size cohorts, from each airport's share of national T-100 passengers.
+# The FAA's own classification (49 U.S.C. 47102) uses a full calendar year;
+# this build has one month, so these are a proxy, not an FAA determination.
 hub_size:
   large_min_share: 0.01     # >= 1% of national passengers
   medium_min_share: 0.0025  # 0.25% - 1%
   small_min_share: 0.0005   # 0.05% - 0.25%
   # below small_min_share -> non_hub
 
-# Slot-controlled airports: FAA caps scheduled operations by regulatory
-# order at these three airports as of the 2026 recon (docs/DATA_RECON.md).
-# Source: FAA Slot Administration / Order Limiting Scheduled Operations at
-# JFK and LGA, and the DCA slot rule (49 U.S.C. 41714, 14 CFR part 93) --
-# https://www.faa.gov/about/office_org/headquarters_offices/ato/service_units/systemops/perf_analysis/slot_administration
-# Confirmed current for the 2026 scheduling season via web search
-# 2026-08-19 (JFK/LGA orders extended to 2028, DCA slot waiver through
-# Oct 2026). This is a hardcoded list, not derived from any ingested table --
-# review it if the FAA orders lapse or a new airport is added.
+# Airports where the FAA caps scheduled operations by regulatory order:
+# the JFK/LGA orders (extended to 2028) and the DCA slot rule (49 U.S.C.
+# 41714, 14 CFR part 93), confirmed current for the 2026 season on
+# 2026-08-19. Hardcoded, not derived from any ingested table -- revisit it
+# if an order lapses or another airport is added.
 slot_controlled_airports: ["JFK", "LGA", "DCA"]

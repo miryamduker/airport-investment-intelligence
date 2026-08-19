@@ -1,20 +1,9 @@
-"""Print the airport rankings this build supports:
-    - top 10 nationally, 'general' weight profile
-    - the full New England ranking, 'terminal_expansion' weight profile
+"""Print the two rankings this build supports: the national top 10 under the
+'general' profile, and all of New England under 'terminal_expansion'.
 
-Both are investment rankings: the investability floor (config:
-thresholds.investable_hub_sizes) excludes non_hub airports before display,
-even though they're scored and remain in mart_airport_metrics for
-non-investment queries (see scoring/score.py's filter_investable).
-
-For each airport: hub_size cohort (shown beside every score -- composite is
-a percentile within cohort, not a national percentile, so mixing cohorts in
-one sorted list without labelling them would be misleading), composite
-score, pillar breakdown, which pillars were unavailable, and confidence
-(scoring/score.py's compute_confidence -- varies per airport by metric
-coverage and departure volume, not a constant). Region filtering happens on
-the OUTPUT of score_airports, never on its input -- see scoring/score.py
-and tests/test_reproducible.py for why.
+Both apply the investability floor, and both filter by region only after
+national scoring. Every row shows its hub_size cohort, because composite is
+a percentile within cohort rather than a national one.
 
 Run:
     python -m scripts.show_ranking
@@ -32,9 +21,6 @@ from scoring.score import filter_investable, score_airports
 MART_PATH = Path("data/marts/mart_airport_metrics.parquet")
 WEIGHTS_CONFIG_PATH = Path("config/weights.yaml")
 
-PILLAR_NAMES = ["demand_pressure", "capacity_strain", "growth_trajectory", "feasibility"]
-
-
 def load_metrics() -> pd.DataFrame:
     con = duckdb.connect()
     df = con.execute(f"SELECT * FROM read_parquet('{MART_PATH.as_posix()}')").df()
@@ -46,6 +32,9 @@ def load_weights_config() -> dict:
     return yaml.safe_load(WEIGHTS_CONFIG_PATH.read_text())
 
 
+PILLAR_NAMES = list(load_weights_config()["pillars"])
+
+
 def format_pillar(value: float) -> str:
     return "unavailable" if pd.isna(value) else f"{value:5.1f}"
 
@@ -53,11 +42,10 @@ def format_pillar(value: float) -> str:
 def print_ranking(scored: pd.DataFrame, title: str, profile: str) -> None:
     print("=" * 78)
     print(f"{title}  (profile: {profile})")
-    print("NOTE: composite/pillar scores are percentiles within each airport's")
-    print("hub_size cohort, not a national percentile -- a 'small' airport at 90 is")
-    print("top-of-cohort for small hubs, not directly comparable in raw traffic to a")
-    print("'large' airport at 90. Cohort is shown on every row for that reason.")
-    print("non_hub airports are excluded (investability floor, config/weights.yaml).")
+    print("Scores are percentiles within each airport's hub_size cohort, not")
+    print("national -- a 'small' airport at 90 is top of the small-hub cohort, not")
+    print("comparable in raw traffic to a 'large' airport at 90. non_hub airports")
+    print("are excluded by the investability floor (config/weights.yaml).")
     print("=" * 78)
     for rank, row in enumerate(scored.itertuples(), start=1):
         pillar_values = {p: getattr(row, p) for p in PILLAR_NAMES}
@@ -98,20 +86,9 @@ def main() -> None:
     print_ranking(new_england, f"NEW ENGLAND -- full ranking ({len(new_england)} airports)", "terminal_expansion")
 
     print("\n" + "=" * 78)
-    print("PILLAR IMPLEMENTATION STATUS (this build)")
-    print("=" * 78)
-    print("  demand_pressure    : load_factor implemented. peak_month_concentration")
-    print("                       and upgauge_gap are not (need multi-month T-100 history).")
-    print("  capacity_strain    : nas_delay_per_departure, taxi_out_p80, pct_delayed_15,")
-    print("                       cancellation_rate implemented from On-Time Performance")
-    print("                       (ingest/ontime.py). completion_gap (T-100-based) was")
-    print("                       tried and removed -- DEPARTURES_SCHEDULED proved")
-    print("                       unreliable at scale, see docs/DATA_RECON.md. OTP only")
-    print("                       covers reporting carriers, so this pillar is NaN for")
-    print("                       any airport with no May 2026 OTP match.")
-    print("  growth_trajectory  : not implemented at all (needs multi-year T-100")
-    print("                       history and FAA TAF ingest) -- always None this build.")
-    print("  feasibility        : fully implemented (runways_per_mpax, slot_controlled).")
+    print("Implemented: load_factor (demand), four On-Time Performance metrics")
+    print("(strain), runways_per_mpax + slot_controlled (feasibility).")
+    print("growth_trajectory has no implemented metric -- see docs/LIMITATIONS.md.")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,24 @@
+# Thresholds for diagnose_unmet_demand (tools/diagnostics.py). Percentiles
+# are within-hub_size-cohort, same as everywhere else in this build; this
+# file only names the cutoffs the classifier branches on.
+
+# A pillar percentile at or above this is "high" for that airport's cohort.
+high_percentile: 75
+# A pillar percentile at or below this is "low" for that airport's cohort.
+low_percentile: 25
+
+# Two judgment calls the code itself can't explain:
+#
+# - Slot control outranks every other signal. A regulatory cap on operations
+#   is by definition a constraint capital cannot remove, so JFK/LGA/DCA are
+#   regulatory_constrained regardless of how their pillars score.
+# - Splitting airfield_constrained from terminal_constrained compares
+#   taxi_out_p80 (ground movement) against the mean of pct_delayed_15 and
+#   cancellation_rate (schedule/turnaround). nas_delay_per_departure is left
+#   out of the split: it doesn't cleanly separate airfield from terminal
+#   causes. This boundary is a documented choice, not a fitted one.
+#
+# weather_vulnerable, from the original design, is not implemented:
+# WEATHER_DELAY is downloaded by ingest/ontime.py but never aggregated into
+# the mart, so there is no column to classify from. The gap is stated in the
+# tool's caveats rather than guessed at.

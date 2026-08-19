@@ -16,7 +16,7 @@ import pandas as pd
 import requests
 import yaml
 
-from ingest.common import ca_bundle_verify
+from ingest.common import ca_bundle_verify, write_parquet
 
 AIRPORTS_URL = "https://davidmegginson.github.io/ourairports-data/airports.csv"
 RUNWAYS_URL = "https://davidmegginson.github.io/ourairports-data/runways.csv"
@@ -64,12 +64,8 @@ def build_airport_dim(con: duckdb.DuckDBPyConnection, airports_csv: Path, runway
             split_part(a.iso_region, '-', 2) AS state,
             a.latitude_deg AS lat,
             a.longitude_deg AS lon,
-            -- NULL (not 0) when no runways.csv row matches this airport:
-            -- that means "no runway data found," not "confirmed zero
-            -- runways," and the two need to stay distinguishable downstream
-            -- (scoring/score.py's confidence calc, runways_per_mpax) --
-            -- COALESCE-ing to 0 here would silently claim a hard runway
-            -- count of 0 for airports OurAirports has no runway record for.
+            -- Left NULL, never 0: "no runway data" and "zero runways" have
+            -- to stay distinguishable for runways_per_mpax and confidence.
             r.runway_count AS runway_count
         FROM read_csv_auto('{airports_csv.as_posix()}') a
         LEFT JOIN runway_counts r ON r.airport_ref = a.id
@@ -140,9 +136,8 @@ def main() -> None:
     ]].sort_values("iata").reset_index(drop=True)
 
     out_path = STAGING_DIR / "dim_airport.parquet"
-    con.register("out_df", out_df)
-    con.execute(f"COPY out_df TO '{out_path.as_posix()}' (FORMAT PARQUET)")
     con.close()
+    write_parquet(out_df, out_path)
 
     print(f"\nwrote {len(out_df):,} rows to {out_path}")
     print("\nhub_size counts:")

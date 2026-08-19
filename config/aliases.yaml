@@ -1,0 +1,23 @@
+# Metro aliases for resolve_airports (tools/lookup.py). Name-substring
+# matching covers most single-airport queries ("Boston" -> "Boston Logan
+# International Airport"); this file exists for metros served by several
+# co-primary airports, and for shorthand ("DC", "NYC") that appears in no
+# airport name at all.
+#
+# Any entry with more than one code resolves as ambiguous, which forces the
+# agent to ask the user instead of guessing. Keys match case-insensitively;
+# codes must exist in data/staging/dim_airport.parquet.
+metro_aliases:
+  LA: [LAX, BUR, LGB, ONT, SNA]
+  LOS ANGELES: [LAX, BUR, LGB, ONT, SNA]
+  NYC: [JFK, LGA, EWR]
+  NEW YORK: [JFK, LGA, EWR]
+  NEW YORK CITY: [JFK, LGA, EWR]
+  BAY AREA: [SFO, OAK, SJC]
+  SAN FRANCISCO BAY AREA: [SFO, OAK, SJC]
+  DC: [DCA, IAD, BWI]
+  WASHINGTON DC: [DCA, IAD, BWI]
+  WASHINGTON D.C.: [DCA, IAD, BWI]
+  CHICAGO: [ORD, MDW]
+  HOUSTON: [IAH, HOU]
+  DALLAS: [DFW, DAL]

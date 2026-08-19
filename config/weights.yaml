@@ -1,152 +1,110 @@
-# Scoring configuration: thresholds, metric polarity, and pillar weight
-# profiles. No magic numbers live in scoring/ or scripts/ Python -- every
-# threshold and weight is read from here.
+# Scoring configuration: thresholds, metric polarity, and pillar weights.
+# Every threshold and weight in scoring/ is read from here.
 #
-# Metric "implemented" status is NOT tracked here as a flag -- it is derived
-# in scoring/score.py from whether the metric's column actually exists in
-# mart_airport_metrics.parquet. That keeps a single source of truth: a metric
-# can't claim implemented: true here while the column computing it is
-# missing or renamed in scoring/metrics.py. Unimplemented metrics are still
-# listed below (with polarity) so the full four-pillar model from CLAUDE.md
-# stays documented even where this build doesn't compute them yet.
+# "Implemented" is not a flag in this file -- scoring/score.py derives it
+# from whether the metric's column exists in mart_airport_metrics.parquet, so
+# a metric can't claim to be implemented while nothing computes it.
+# Unimplemented metrics stay listed below, with polarity, so the full
+# four-pillar model remains documented.
 
 thresholds:
-  # Minimum total DEPARTURES_PERFORMED (summed across all carriers/routes)
-  # for an origin airport to survive into mart_airport_metrics. Below this,
-  # one month of T-100 data is too thin (single-digit departures) for a
-  # percentile rank to mean anything -- see scoring/metrics.py's cutoff
-  # report for where this line falls in the actual distribution (chosen at
-  # ~1 departure/day, roughly the p25 breakpoint in the May 2026 pull).
+  # Minimum DEPARTURES_PERFORMED for an origin to enter the mart. Below one
+  # departure a day, a single month of T-100 is too thin for a percentile to
+  # mean anything. Sits near the p25 breakpoint of the May 2026 pull.
   min_departures_threshold: 30
 
-  # Investability floor -- separate from min_departures_threshold above.
-  # min_departures_threshold answers "is one month of data enough to trust a
-  # percentile for this airport at all" (a statistical-noise question);
-  # investable_hub_sizes answers "even with a trustworthy percentile, is this
-  # airport big enough to be a plausible expansion-capital target" (a
-  # thesis question). non_hub airports are <0.05% of national passengers
-  # (see ingest/airports.py) -- percentile rank measures "unusual for its
-  # own cohort," not "big enough to matter," so a non_hub airport can top
-  # its own cohort on a thin fluke of one month's data while still being
-  # far too small for infrastructure investment at the scale this firm
-  # operates at. Excluded from investment rankings (scoring.score.
-  # filter_investable), but they stay in mart_airport_metrics and are still
-  # valid for non-investment queries like flight_mix.
+  # A separate question from the threshold above: that one asks whether the
+  # data is trustworthy, this one asks whether the airport is a plausible
+  # target for expansion capital at all. non_hub airports are under 0.05% of
+  # national passengers, and percentile rank measures "unusual for its
+  # cohort", not "big enough to matter" -- so a thin month can float one to
+  # the top of its own cohort. Excluded from rankings, but kept in the mart
+  # for descriptive queries like flight_mix.
   investable_hub_sizes: [large, medium, small]
 
-# Confidence per airport is a blend of three independent per-airport
-# reliability signals (scoring/score.py: compute_confidence), not a
-# pillar-availability count alone -- a pillar-count-only measure was
-# constant across the whole dataset (0.75 for every airport, since
-# growth_trajectory is always unavailable and the other three pillars
-# always had at least one non-null metric). Weights sum to 1. Splitting
-# metric_coverage down to 0.4 (from 0.5) to make room for carrier_diversity
-# is a documented judgment call, not a fitted parameter -- adjust freely.
+# Per-airport confidence blends three independent reliability signals
+# (scoring/score.py: compute_confidence). A pillar-availability count was
+# tried first and rejected: it came out 0.75 for every airport in the
+# dataset. Weights sum to 1 and are a judgment call, not a fitted parameter.
 confidence:
-  # Fraction of this build's implemented metrics (across all pillars) that
-  # have a real, non-null value for a given airport. Catches per-airport
-  # gaps a pillar-level count misses: e.g. an airport OurAirports has no
-  # runway match for (runways_per_mpax NaN, see ingest/airports.py), an
-  # airport with zero passengers (load_factor NaN), or one with no May
-  # 2026 On-Time Performance match at all (all four capacity_strain
-  # metrics NaN -- see docs/DATA_RECON.md).
+  # Share of implemented metrics with a real value for this airport. Catches
+  # per-airport gaps a pillar-level count misses: no OurAirports runway
+  # match, zero passengers, no On-Time Performance match at all.
   metric_coverage_weight: 0.4
-  # How much May-2026 traffic backs this airport's percentile rank. An
-  # airport just above min_departures_threshold (30) is statistically
-  # noisier than a hub with tens of thousands of departures, even though
-  # both "have" a load_factor value. Ramps linearly from 0 to 1.
+  # How much traffic backs the percentile. An airport just over the
+  # 30-departure threshold is far noisier than a hub, though both "have" a
+  # load_factor. Ramps linearly to full confidence.
   volume_weight: 0.3
-  # departures_performed at/above this level counts as full statistical
-  # confidence for the volume component. ~1,000/month is ~33/day --
-  # roughly hourly departures across a normal operating day -- and sits
-  # around the 80th percentile of May 2026 survivors, so the ramp actually
-  # discriminates instead of saturating almost everyone or almost no one.
+  # ~1,000 departures/month is ~33/day, roughly hourly across an operating
+  # day, and sits near the 80th percentile of May 2026 survivors -- so the
+  # ramp discriminates instead of saturating nearly everyone.
   full_confidence_departures: 1000
-  # How many distinct carriers reported On-Time Performance data for this
-  # airport in May 2026. An airport with 2 reporting carriers is a much
-  # thinner statistical base for capacity_strain than one with 8 -- and an
-  # airport with NO OTP match at all (reporting_carrier_count missing)
-  # floors this component at 0, which is a confidence signal, not a metric
-  # value: the capacity_strain metrics themselves stay NaN and propagate
-  # through renormalization (they are never imputed from this).
+  # Distinct carriers reporting OTP data. Two carriers is a much thinner base
+  # for capacity_strain than eight; no OTP match floors this at 0, which is a
+  # confidence signal, not a metric value (the metrics themselves stay NaN).
   carrier_diversity_weight: 0.3
-  # reporting_carrier_count at/above this level counts as full confidence
-  # for the carrier-diversity component. Chosen to match the example in
-  # the brief (2 carriers should score lower than 8); May 2026's observed
-  # range is 1-13 reporting carriers per airport, median 3.
+  # May 2026's observed range is 1-13 reporting carriers, median 3.
   full_confidence_carriers: 8
 
 pillars:
   demand_pressure:
     metrics:
       load_factor:
-        polarity: 1   # higher load factor = more demand pressure = stronger candidate
+        polarity: 1   # fuller flights = more demand pressure
       peak_month_concentration:
-        polarity: -1  # not implemented this build -- needs multi-month T-100 history
+        polarity: -1  # not implemented -- needs multi-month T-100 history
       upgauge_gap:
-        polarity: -1  # not implemented this build -- not in current scope (see CLAUDE.md task note)
+        polarity: -1  # not implemented -- needs multi-month T-100 history
 
   capacity_strain:
-    # completion_gap (1 - departures_performed/departures_scheduled) was
-    # implemented and then removed: T-100's DEPARTURES_SCHEDULED turned out
-    # to be unreliable at scale (62% of surviving airports show performed >
-    # scheduled, worst at major hubs -- JFK +23%), so the gap measured
-    # carrier schedule-filing behavior, not airport capacity strain. See
-    # scoring/metrics.py and docs/DATA_RECON.md for the full investigation.
+    # completion_gap (1 - performed/scheduled) was implemented and removed:
+    # 62% of surviving airports show performed > scheduled, worst at major
+    # hubs (JFK +23%), so it measured carrier schedule-filing behaviour, not
+    # strain. See docs/LIMITATIONS.md.
     #
-    # All four metrics below now come from On-Time Performance
-    # (ingest/ontime.py, joined in scoring/metrics.py) instead. OTP only
-    # covers "reporting carriers" -- 131 of the 132 large/medium/small hub
-    # airports (the investable ones, see investable_hub_sizes above) have a
-    # May 2026 OTP match (see docs/DATA_RECON.md) -- so this pillar is NaN
-    # for the rare airport T-100 sees but OTP doesn't, same treatment as any
-    # other missing metric: no imputation, propagates through pillar
-    # renormalization.
+    # All four metrics below come from On-Time Performance instead, which
+    # only covers reporting carriers -- 131 of the 132 investable hubs match
+    # for May 2026. The pillar is NaN for the rest: no imputation, the weight
+    # is renormalized away.
     metrics:
       nas_delay_per_departure:
-        polarity: 1   # more NAS delay per completed departure = more strain = stronger candidate
+        polarity: 1   # more locally caused delay = more strain
       taxi_out_p80:
-        polarity: 1   # longer 80th-percentile taxi-out = more ground congestion = stronger candidate
+        polarity: 1   # longer taxi-out = more ground congestion
       pct_delayed_15:
-        polarity: 1   # higher share of departures delayed 15+ min = more strain = stronger candidate
+        polarity: 1   # more late departures = more strain
       cancellation_rate:
-        polarity: 1   # more cancellations relative to scheduled flights = more strain = stronger candidate
+        polarity: 1   # more cancellations = more strain
 
   growth_trajectory:
     metrics:
       passenger_cagr_3y:
-        polarity: 1   # not implemented this build -- needs multi-year T-100 history
+        polarity: 1   # not implemented -- needs multi-year T-100 history
       taf_forecast_growth:
-        polarity: 1   # not implemented this build -- needs FAA TAF ingest
+        polarity: 1   # not implemented -- needs FAA TAF ingest
 
   feasibility:
     metrics:
       runways_per_mpax:
-        polarity: 1   # more runway capacity per million passengers = more room to add capacity
+        polarity: 1   # more runway per passenger = more room to grow
       slot_controlled:
-        polarity: -1  # slot control is a constraint capital can't remove = weaker candidate
+        polarity: -1  # a cap capital can't remove = weaker candidate
 
-# Pillar weights per use case. A documented judgment call, not a fitted
-# parameter (CLAUDE.md). Composite = weighted sum of pillar scores,
-# renormalized in scoring/score.py over only the pillars that have data for
-# a given airport (e.g. growth_trajectory is None for every airport this
-# build, so its weight is redistributed proportionally across the other
-# three).
+# Pillar weights per use case: a documented judgment call, not a fitted
+# parameter. Composite is renormalized over the pillars an airport actually
+# has, so growth_trajectory's weight is redistributed for everyone this build.
 profiles:
   terminal_expansion:
-    # Terminal/gate capacity investment cares most about passenger demand
-    # pressure and how binding the current operational strain already is;
-    # runway feasibility matters less since terminal work doesn't need new
-    # runways.
+    # Gate and terminal capital follows passenger demand and how binding the
+    # current strain is; runway feasibility matters less.
     demand_pressure: 0.35
     capacity_strain: 0.35
     growth_trajectory: 0.15
     feasibility: 0.15
 
   airfield_expansion:
-    # Runway/taxiway investment cares most about whether the airfield itself
-    # is the binding constraint and whether there's physical/regulatory room
-    # to add capacity (feasibility).
+    # Runway and taxiway capital follows whether the airfield is the binding
+    # constraint, and whether there is room to add to it.
     demand_pressure: 0.20
     capacity_strain: 0.30
     growth_trajectory: 0.15

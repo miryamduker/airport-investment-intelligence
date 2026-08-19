@@ -1,14 +1,7 @@
 """Download one month of BTS T-100 Segment (passenger service only) into
 data/staging/t100_segment.parquet.
 
-The row-level T-100 Segment table is not on the Socrata REST API at
-data.bts.gov -- see docs/DATA_RECON.md. It lives on the legacy TranStats
-system (transtats.bts.gov) behind an ASP.NET download form
-(DL_SelectFields.aspx) rather than a REST endpoint. BTS obfuscates that
-form's querystring parameters and lookup-table links with ROT13 (e.g.
-gnoyr_VQ -> table_ID); this module replicates the form POST the same way
-the browser does: GET the page for fresh __VIEWSTATE/__EVENTVALIDATION
-tokens, then POST the desired field checkboxes plus year/month.
+Access path is the shared TranStats form-post -- see ingest/transtats.py.
 
 Run:
     python -m ingest.t100
@@ -17,28 +10,17 @@ Run:
 from __future__ import annotations
 
 import argparse
-import re
-import zipfile
 from pathlib import Path
 
-import duckdb
 import pandas as pd
-import requests
 import yaml
 
-from ingest.common import ca_bundle_verify
+from ingest.common import write_parquet
+from ingest.transtats import download_table, read_csv_from_zip
 
-# --- TranStats access -------------------------------------------------------
-
-DL_URL = "https://transtats.bts.gov/DL_SelectFields.aspx"
 # ROT13-obfuscated by BTS: table_ID=FMG, DB_short_name=Air Carriers
 DL_PARAMS = {"gnoyr_VQ": "FMG", "QO_fu146_anzr": "Nv4 Pn44vr45"}
 
-# Field checkboxes on DL_SelectFields.aspx, confirmed present by fetching and
-# parsing the live form (docs/DATA_RECON.md: "T-100 Segment ingest path
-# resolved"). This is the full carrier x origin x dest x month grain the
-# thesis needs, including the PASSENGERS/SEATS/CLASS/AIRCRAFT_CONFIG columns
-# that were NOT present in the earlier stale PREZIP sample.
 FIELDS = [
     "UNIQUE_CARRIER", "UNIQUE_CARRIER_NAME",
     "ORIGIN_AIRPORT_ID", "ORIGIN", "ORIGIN_CITY_NAME", "ORIGIN_STATE_ABR",
@@ -49,10 +31,8 @@ FIELDS = [
     "FREIGHT", "MAIL", "DATA_SOURCE",
 ]
 
-# Latest month confirmed published as of this recon (2026-08-19): May 2026
-# downloads real data, June 2026 returns the form's HTML error page instead
-# of a zip, i.e. not yet released. Override with --year/--month once later
-# months are published.
+# Latest month published as of 2026-08-19; June 2026 returns the form's error
+# page instead of a zip. Override with --year/--month.
 DEFAULT_YEAR = 2026
 DEFAULT_MONTH = 5
 
@@ -66,6 +46,8 @@ NUMERIC_INT_COLUMNS = [
     "DEPARTURES_SCHEDULED", "DEPARTURES_PERFORMED", "SEATS", "PASSENGERS",
     "FREIGHT", "MAIL", "DISTANCE",
 ]
+# State abbreviations are legitimately null for international routes, so these
+# stay nullable strings rather than being filled.
 STRING_COLUMNS = [
     "UNIQUE_CARRIER", "UNIQUE_CARRIER_NAME", "ORIGIN", "ORIGIN_CITY_NAME",
     "ORIGIN_STATE_ABR", "DEST", "DEST_CITY_NAME", "DEST_STATE_ABR", "CLASS",
@@ -73,72 +55,8 @@ STRING_COLUMNS = [
 ]
 
 
-def _hidden_field(html: str, field_id: str) -> str:
-    m = re.search(rf'id="{field_id}"[^>]*value="([^"]*)"', html)
-    return m.group(1) if m else ""
-
-
-def download_t100(year: int, month: int, raw_dir: Path) -> Path:
-    """Download one month of T-100 Segment as a zip, caching in raw_dir."""
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    dest = raw_dir / f"t100_segment_{year}_{month:02d}.zip"
-    if dest.exists():
-        print(f"raw zip already cached: {dest}")
-        return dest
-
-    session = requests.Session()
-    session.verify = ca_bundle_verify()
-
-    form_page = session.get(DL_URL, params=DL_PARAMS, timeout=30)
-    form_page.raise_for_status()
-    html = form_page.text
-
-    data = {
-        "__VIEWSTATE": _hidden_field(html, "__VIEWSTATE"),
-        "__VIEWSTATEGENERATOR": _hidden_field(html, "__VIEWSTATEGENERATOR"),
-        "__EVENTVALIDATION": _hidden_field(html, "__EVENTVALIDATION"),
-        "__EVENTTARGET": "",
-        "__EVENTARGUMENT": "",
-        "cboGeography": "All",
-        "cboYear": str(year),
-        "cboPeriod": str(month),
-        "chkDownloadZip": "on",
-        "btnDownload": "Download",
-    }
-    for field in FIELDS:
-        data[field] = "on"
-
-    response = session.post(DL_URL, params=DL_PARAMS, data=data, timeout=120)
-    response.raise_for_status()
-    content_type = response.headers.get("Content-Type", "")
-    if "zip" not in content_type:
-        raise RuntimeError(
-            f"expected a zip download for {year}-{month:02d}, got "
-            f"Content-Type={content_type!r}. Most likely that month isn't "
-            f"published yet on TranStats -- try an earlier --month."
-        )
-
-    dest.write_bytes(response.content)
-    print(f"downloaded {dest} ({len(response.content):,} bytes)")
-    return dest
-
-
-# --- staging -----------------------------------------------------------------
-
-
 def load_passenger_classes(config_path: Path) -> list[str]:
-    config = yaml.safe_load(config_path.read_text())
-    return config["t100_segment"]["passenger_service_classes"]
-
-
-def read_segment_csv(zip_path: Path) -> pd.DataFrame:
-    with zipfile.ZipFile(zip_path) as z:
-        csv_name = next(
-            n for n in z.namelist()
-            if n.lower().endswith(".csv") and "document" not in n.lower()
-        )
-        with z.open(csv_name) as f:
-            return pd.read_csv(f, low_memory=False)
+    return yaml.safe_load(config_path.read_text())["t100_segment"]["passenger_service_classes"]
 
 
 def apply_types(df: pd.DataFrame) -> pd.DataFrame:
@@ -147,18 +65,7 @@ def apply_types(df: pd.DataFrame) -> pd.DataFrame:
         df[col] = df[col].astype("int64")
     for col in STRING_COLUMNS:
         df[col] = df[col].astype("string")
-    # state abbreviations are legitimately null for international routes
-    for col in ("ORIGIN_STATE_ABR", "DEST_STATE_ABR"):
-        df[col] = df[col].astype("string")
     return df
-
-
-def write_parquet(df: pd.DataFrame, out_path: Path) -> None:
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    con = duckdb.connect()
-    con.register("df", df)
-    con.execute(f"COPY df TO '{out_path.as_posix()}' (FORMAT PARQUET)")
-    con.close()
 
 
 def print_validation_report(df_before: pd.DataFrame, df_after: pd.DataFrame) -> None:
@@ -205,12 +112,14 @@ def main() -> None:
     parser.add_argument("--month", type=int, default=DEFAULT_MONTH)
     args = parser.parse_args()
 
-    zip_path = download_t100(args.year, args.month, RAW_DIR)
+    zip_path = download_table(
+        DL_PARAMS, FIELDS, args.year, args.month,
+        RAW_DIR / f"t100_segment_{args.year}_{args.month:02d}.zip",
+    )
 
-    df_raw = read_segment_csv(zip_path)
+    df_raw = read_csv_from_zip(zip_path)
     passenger_classes = load_passenger_classes(CONFIG_PATH)
     df_filtered = df_raw[df_raw["CLASS"].isin(passenger_classes)].reset_index(drop=True)
-
     df_typed = apply_types(df_filtered)
 
     out_path = STAGING_DIR / "t100_segment.parquet"
