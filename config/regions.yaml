@@ -1,0 +1,21 @@
+# State -> region mapping used for query-time filtering (never for scoring --
+# percentiles are always computed nationally first, see scoring/score.py and
+# CLAUDE.md's "Scoring" section).
+#
+# Regions follow the US Census Bureau's nine divisions, collapsed to the
+# groupings this brief names explicitly (new_england) plus the rest of the
+# divisions for full US coverage. DC is grouped with south_atlantic per
+# Census convention. Territories are not divisions in the Census scheme but
+# are included so no T-100 origin state is left unmapped.
+
+regions:
+  new_england: [ME, NH, VT, MA, RI, CT]
+  mid_atlantic: [NY, NJ, PA]
+  south_atlantic: [DE, MD, DC, VA, WV, NC, SC, GA, FL]
+  east_north_central: [OH, IN, IL, MI, WI]
+  west_north_central: [MN, IA, MO, ND, SD, NE, KS]
+  east_south_central: [KY, TN, AL, MS]
+  west_south_central: [AR, LA, OK, TX]
+  mountain: [MT, ID, WY, CO, NM, AZ, UT, NV]
+  pacific: [WA, OR, CA, AK, HI]
+  territories: [PR, VI, GU, AS, MP]
