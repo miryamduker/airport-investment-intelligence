@@ -276,3 +276,43 @@
   background: var(--silver-light);
   color: var(--text);
 }
+
+.api-error.backend-down {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.api-error code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  background: #f5dede;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.retry-button {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border: 1px solid #c08a8a;
+  border-radius: 6px;
+  background: #fff;
+  color: #7a2020;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.retry-button:hover {
+  background: #f8e4e4;
+}
+
+.retry-button:focus-visible {
+  outline: 2px solid #7a2020;
+  outline-offset: 2px;
+}
+
+.input-row textarea:disabled {
+  background: var(--silver-light);
+  cursor: not-allowed;
+}

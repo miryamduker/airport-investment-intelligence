@@ -5,6 +5,10 @@ export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 // animation that never stops.
 export const REQUEST_TIMEOUT_MS = 120_000
 
+// The load-time liveness probe should fail fast: if the backend isn't there,
+// the user should know before they type, not after a long wait.
+export const HEALTH_TIMEOUT_MS = 5_000
+
 // Matches MAX_MESSAGE_CHARS in api/main.py -- caught here so an over-long
 // message never becomes a 422 round trip.
 export const MAX_MESSAGE_CHARS = 2000

@@ -58,11 +58,18 @@ def patch_agent(monkeypatch):
 # health
 # --------------------------------------------------------------------------
 
-def test_health_reports_status_and_data_vintage(client):
+def test_health_reports_status_model_and_data_vintage(client):
+    """The UI checks this on load, so it must answer without a key or a
+    model call. model/as_of are what identify which build is running."""
     body = client.get("/health").json()
     assert body["status"] == "ok"
+    assert body["model"]
     assert body["as_of"]
-    assert "openai_key_configured" in body
+
+
+def test_health_makes_no_model_call(client):
+    client.get("/health")
+    assert FakeAgent.last_instance is None
 
 
 def test_startup_fails_fast_without_an_api_key(monkeypatch):

@@ -17,14 +17,13 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict
 from typing import Any, Literal
 
-import openai
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from agent.loop import DEFAULT_MODEL, Agent
+from api.errors import register_error_handlers
 from tools import data as d
 
 load_dotenv()
@@ -64,6 +63,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+register_error_handlers(app)
+
 
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant"]
@@ -89,47 +90,21 @@ class ChatResponse(BaseModel):
     as_of: str
 
 
-def _upstream_error(status_code: int, detail: str, exc: Exception) -> JSONResponse:
-    logger.error("upstream model error -> %d: %s (%s)", status_code, exc.__class__.__name__, exc)
-    return JSONResponse(status_code=status_code, content={"detail": detail})
+class HealthResponse(BaseModel):
+    status: Literal["ok"]
+    model: str
+    as_of: str
 
 
-@app.exception_handler(openai.AuthenticationError)
-async def handle_auth_error(request: Request, exc: openai.AuthenticationError) -> JSONResponse:
-    return _upstream_error(502, "The model provider rejected our API key. Check OPENAI_API_KEY.", exc)
+@app.get("/health", response_model=HealthResponse)
+def health() -> HealthResponse:
+    """Liveness for the UI, which checks it on load so an unreachable backend
+    is visible before the user types a question rather than after.
 
-
-@app.exception_handler(openai.RateLimitError)
-async def handle_rate_limit(request: Request, exc: openai.RateLimitError) -> JSONResponse:
-    return _upstream_error(429, "The model provider is rate-limiting us. Wait a moment and try again.", exc)
-
-
-@app.exception_handler(openai.APITimeoutError)
-async def handle_timeout(request: Request, exc: openai.APITimeoutError) -> JSONResponse:
-    return _upstream_error(504, "The model provider did not respond in time. Try again.", exc)
-
-
-@app.exception_handler(openai.APIConnectionError)
-async def handle_connection_error(request: Request, exc: openai.APIConnectionError) -> JSONResponse:
-    return _upstream_error(502, "Could not reach the model provider. Check the network connection.", exc)
-
-
-@app.exception_handler(openai.APIError)
-async def handle_api_error(request: Request, exc: openai.APIError) -> JSONResponse:
-    """Catch-all for the rest of the OpenAI error family. Registered last so
-    the specific handlers above win; Starlette resolves by walking the MRO."""
-    return _upstream_error(502, "The model provider returned an error. Try again.", exc)
-
-
-@app.get("/health")
-def health() -> dict[str, Any]:
-    """Lets the UI tell 'backend down' from 'backend slow' before a send."""
-    return {
-        "status": "ok",
-        "model": DEFAULT_MODEL,
-        "as_of": d.AS_OF,
-        "openai_key_configured": bool(os.environ.get("OPENAI_API_KEY")),
-    }
+    `model` and `as_of` are here because they also answer the other question
+    worth asking of a running server: not just whether it is up, but whether
+    it is the build you think it is."""
+    return HealthResponse(status="ok", model=DEFAULT_MODEL, as_of=d.AS_OF)
 
 
 @app.post("/chat", response_model=ChatResponse)
