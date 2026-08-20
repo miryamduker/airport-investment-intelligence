@@ -1,8 +1,8 @@
 """Build data/staging/dim_airport.parquet from OurAirports (free CSV) plus
 T-100 Segment passenger shares.
 
-Columns: iata code, name, state, lat, lon, runway count, region, hub_size,
-slot_controlled.
+Columns: iata code, name, city, state, lat, lon, runway count, region,
+hub_size, slot_controlled.
 
 Run:
     python -m ingest.airports
@@ -49,7 +49,13 @@ def load_state_region_map(path: Path) -> dict[str, str]:
     return state_to_region
 
 
-def build_airport_dim(con: duckdb.DuckDBPyConnection, airports_csv: Path, runways_csv: Path) -> pd.DataFrame:
+def build_airport_dim(
+    con: duckdb.DuckDBPyConnection,
+    airports_csv: Path,
+    runways_csv: Path,
+    iso_countries: list[str],
+) -> pd.DataFrame:
+    countries = ", ".join(f"'{c}'" for c in iso_countries)
     df = con.execute(
         f"""
         WITH runway_counts AS (
@@ -61,7 +67,20 @@ def build_airport_dim(con: duckdb.DuckDBPyConnection, airports_csv: Path, runway
         SELECT
             a.iata_code AS iata,
             a.name,
-            split_part(a.iso_region, '-', 2) AS state,
+            -- OurAirports' municipality. Carried because 39 of the investable
+            -- hubs have an airport name that contains no city name at all
+            -- (LAS = "Harry Reid", IAH = "George Bush Intercontinental",
+            -- SJU = "Luis Munoz Marin"), so resolve_airports cannot reach
+            -- them by substring. Some values carry a qualifier after a comma
+            -- ("Honolulu, Oahu"); the resolver matches on the part before it.
+            a.municipality AS city,
+            -- For the 50 states + DC the subdivision half of iso_region IS
+            -- the state code. For the territories it is a district code
+            -- (PR-U-A -> 'U', AS-WT -> 'WT'), so fall back to iso_country,
+            -- which is what config/regions.yaml maps under `territories`.
+            CASE WHEN a.iso_country = 'US'
+                 THEN split_part(a.iso_region, '-', 2)
+                 ELSE a.iso_country END AS state,
             a.latitude_deg AS lat,
             a.longitude_deg AS lon,
             -- Left NULL, never 0: "no runway data" and "zero runways" have
@@ -69,7 +88,7 @@ def build_airport_dim(con: duckdb.DuckDBPyConnection, airports_csv: Path, runway
             r.runway_count AS runway_count
         FROM read_csv_auto('{airports_csv.as_posix()}') a
         LEFT JOIN runway_counts r ON r.airport_ref = a.id
-        WHERE a.iso_country = 'US'
+        WHERE a.iso_country IN ({countries})
           AND a.iata_code IS NOT NULL
           AND a.iata_code != ''
         """
@@ -115,7 +134,8 @@ def main() -> None:
     runways_csv = download(RUNWAYS_URL, RAW_DIR / "ourairports_runways.csv")
 
     con = duckdb.connect()
-    df = build_airport_dim(con, airports_csv, runways_csv)
+    ingest_config = yaml.safe_load(INGEST_CONFIG_PATH.read_text())
+    df = build_airport_dim(con, airports_csv, runways_csv, ingest_config["iso_countries"])
     print(f"US airports with an IATA code: {len(df):,}")
 
     state_to_region = load_state_region_map(REGIONS_CONFIG_PATH)
@@ -124,15 +144,14 @@ def main() -> None:
     if len(unmapped):
         print(f"states with no region mapping ({len(unmapped)}): {sorted(unmapped)}")
 
-    ingest_config = yaml.safe_load(INGEST_CONFIG_PATH.read_text())
     df = add_hub_size(con, df, T100_PATH, ingest_config["hub_size"])
 
     slot_controlled = set(ingest_config["slot_controlled_airports"])
     df["slot_controlled"] = df["iata"].isin(slot_controlled)
 
     out_df = df[[
-        "iata", "name", "state", "region", "lat", "lon", "runway_count",
-        "hub_size", "slot_controlled",
+        "iata", "name", "city", "state", "region", "lat", "lon",
+        "runway_count", "hub_size", "slot_controlled",
     ]].sort_values("iata").reset_index(drop=True)
 
     out_path = STAGING_DIR / "dim_airport.parquet"

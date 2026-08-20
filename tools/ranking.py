@@ -47,7 +47,7 @@ def rank_airports(region: str, profile: str, top_n: int) -> dict:
     return {
         "region": region,
         "profile": profile,
-        "weights_used": d.weights_config()["profiles"][profile],
+        "weights_used": d.scoring_config()["profiles"][profile],
         "top_n_requested": top_n,
         "total_investable_airports_considered": len(pool),
         "results": results,
@@ -107,7 +107,7 @@ def compare_airports(codes: list[str], dimension: str, profile: str = "general")
     if dimension == "composite":
         caveats.extend([d.CAVEAT_GROWTH_MISSING, d.CAVEAT_LOAD_FACTOR_ONLY])
     else:
-        polarity = d.weights_config()["pillars"][meta["pillar"]]["metrics"][dimension]["polarity"]
+        polarity = d.scoring_config()["pillars"][meta["pillar"]]["metrics"][dimension]["polarity"]
         direction = "the SAME direction as" if polarity == 1 else "the OPPOSITE direction from"
         higher_pctile_means = meta["higher_raw_means"] if polarity == 1 else f"LESS {meta['higher_raw_means']}"
         caveats.append(

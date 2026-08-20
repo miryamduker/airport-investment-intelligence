@@ -25,16 +25,15 @@ MART_METRICS_PATH = Path("data/marts/mart_airport_metrics.parquet")
 DIM_AIRPORT_PATH = Path("data/staging/dim_airport.parquet")
 T100_PATH = Path("data/staging/t100_segment.parquet")
 
-WEIGHTS_CONFIG_PATH = Path("config/weights.yaml")
+SCORING_CONFIG_PATH = Path("config/scoring.yaml")
 REGIONS_CONFIG_PATH = Path("config/regions.yaml")
 ALIASES_CONFIG_PATH = Path("config/aliases.yaml")
 DIAGNOSIS_CONFIG_PATH = Path("config/diagnosis.yaml")
-LIVE_TRAFFIC_CONFIG_PATH = Path("config/live_traffic.yaml")
 HAUL_CONFIG_PATH = Path("config/haul.yaml")
 
 AS_OF = "2026-05"
 
-# Polarity lives with the metric in config/weights.yaml; this is what the
+# Polarity lives with the metric in config/scoring.yaml; this is what the
 # tools need to render a raw value.
 RAW_METRIC_COLUMNS: dict[str, dict[str, Any]] = {
     "load_factor": {
@@ -83,10 +82,12 @@ CAVEAT_COHORT_PERCENTILE = (
     "traffic to a large hub at 90."
 )
 CAVEAT_GROWTH_MISSING = (
-    "growth_trajectory is not implemented this build (needs multi-year T-100 "
-    "history and an FAA TAF ingest neither of which this build has); its "
-    "weight is redistributed proportionally across the other three pillars "
-    "for every airport, never silently dropped."
+    "growth_trajectory, the fourth pillar of the designed model, is not "
+    "computed in this build (it needs multi-year T-100 history and an FAA "
+    "TAF ingest, neither of which this build has). It carries no weight "
+    "here: every composite is built from demand_pressure, capacity_strain "
+    "and feasibility only, so forward-looking growth is absent from the "
+    "ranking rather than estimated."
 )
 CAVEAT_LOAD_FACTOR_ONLY = (
     "demand_pressure rests on load_factor alone this build and systematically "
@@ -106,7 +107,7 @@ CAVEAT_CLASS_L_INCLUDED = (
 )
 CAVEAT_INVESTABILITY_FLOOR = (
     "non_hub airports are excluded by the investability floor "
-    "(config/weights.yaml: thresholds.investable_hub_sizes) -- they are too "
+    "(config/scoring.yaml: thresholds.investable_hub_sizes) -- they are too "
     "small a share of national traffic to be a plausible infrastructure "
     "investment target, even if a thin month of data lets one top its own cohort."
 )
@@ -135,8 +136,8 @@ def dim_airport_df() -> pd.DataFrame:
 
 
 @lru_cache(maxsize=1)
-def weights_config() -> dict:
-    return _read_yaml(WEIGHTS_CONFIG_PATH)
+def scoring_config() -> dict:
+    return _read_yaml(SCORING_CONFIG_PATH)
 
 
 @lru_cache(maxsize=1)
@@ -155,11 +156,6 @@ def diagnosis_config() -> dict:
 
 
 @lru_cache(maxsize=1)
-def live_traffic_config() -> dict:
-    return _read_yaml(LIVE_TRAFFIC_CONFIG_PATH)
-
-
-@lru_cache(maxsize=1)
 def haul_config() -> dict:
     return _read_yaml(HAUL_CONFIG_PATH)
 
@@ -171,29 +167,29 @@ def region_names() -> list[str]:
 
 @lru_cache(maxsize=1)
 def pillar_names() -> list[str]:
-    return list(weights_config()["pillars"])
+    return list(scoring_config()["pillars"])
 
 
 @lru_cache(maxsize=1)
 def percentiles() -> pd.DataFrame:
     """Cohort percentile per implemented metric. Row order matches
     metrics_df(), so the two frames align positionally."""
-    return compute_metric_percentiles(metrics_df(), weights_config()["pillars"])
+    return compute_metric_percentiles(metrics_df(), scoring_config()["pillars"])
 
 
 @lru_cache(maxsize=1)
 def pillar_scores() -> pd.DataFrame:
-    return compute_pillar_scores(percentiles(), weights_config()["pillars"])
+    return compute_pillar_scores(percentiles(), scoring_config()["pillars"])
 
 
 @lru_cache(maxsize=8)
 def scored(profile: str) -> pd.DataFrame:
-    return score_airports(metrics_df(), weights_config(), profile)
+    return score_airports(metrics_df(), scoring_config(), profile)
 
 
 @lru_cache(maxsize=8)
 def scored_investable(profile: str) -> pd.DataFrame:
-    return filter_investable(scored(profile), weights_config())
+    return filter_investable(scored(profile), scoring_config())
 
 
 def row_index_for_code(code: str) -> int | None:

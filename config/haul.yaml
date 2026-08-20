@@ -1,29 +1,15 @@
 # Haul-length bands for flight_mix (tools/traffic.py), applied to T-100
 # Segment's DISTANCE column (statute miles, great-circle, per segment).
 #
-# There is no binding standard for "long haul". IATA classifies by flight
-# time (long-haul = 6-16 hours), the US EPA uses >2,300 miles, the UK CAA
-# uses >3,000 km, and carriers set their own (Southwest calls <=500 miles
-# short-haul; United uses <=800). So the cutoff below is a documented
-# judgment call, exactly like the pillar weights in weights.yaml -- not a
-# fitted parameter and not an industry constant.
-#
-# 2,500 miles is chosen as the long-haul floor because it is the closest
-# round number to the EPA's 2,300-mile line and to the ~2,500-mile (4,000 km)
-# figure the 6-hour IATA boundary implies at typical narrowbody cruise. It
-# also falls inside BTS's own DISTANCE_GROUP band 6 (2,500-2,999), so the
-# bands stay reconcilable against BTS's published groupings.
-#
-# The cutoff moves the answer more than the data source does. May 2026,
-# Anchorage (ANC), passenger service, share of departures:
-#   >= 1,500 mi  19.8%     >= 2,500 mi   9.6%
-#   >= 2,000 mi  15.5%     >= 3,000 mi   2.8%
-# Change these values and every haul figure changes with them; that is the
-# point of putting them here rather than in code.
+# The 2,500-mile long-haul floor is a documented judgment call, not an
+# industry constant, and it moves the answer more than the data source does.
+# Rationale and the sensitivity table: docs/LIMITATIONS.md, "Long haul is a
+# configured cutoff". User-facing wording: HAUL_CAVEATS in tools/traffic.py.
 
 # Half-open intervals [min_miles, max_miles). max_miles: null is unbounded.
-# Must be ordered and contiguous -- flight_mix bins every row into exactly
-# one band, so a gap would silently drop departures from the shares.
+# Must stay ordered and contiguous -- flight_mix bins every row into exactly
+# one band, so a gap silently drops departures from the shares. Enforced by
+# tests/test_haul_mix.py::test_bands_are_ordered_and_contiguous.
 bands:
   - name: short_haul
     min_miles: 0

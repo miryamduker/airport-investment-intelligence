@@ -1,4 +1,4 @@
-"""OpenAI function-calling schemas for the eight tools in tools/registry.py.
+"""OpenAI function-calling schemas for the seven tools in tools/registry.py.
 
 Every argument that can be enumerated is enumerated, drawn from the frozen
 mart/config layer. resolve_airports' `query` is the one deliberate
@@ -12,7 +12,7 @@ from tools import data as d
 
 AIRPORT_CODE_ENUM = sorted(d.metrics_df()["code"].tolist())
 REGION_ENUM = d.region_names() + ["national"]
-PROFILE_ENUM = sorted(d.weights_config()["profiles"].keys())
+PROFILE_ENUM = sorted(d.scoring_config()["profiles"].keys())
 TOP_N_ENUM = [5, 10, 15, 20]
 COMPARE_DIMENSION_ENUM = ["composite"] + list(d.RAW_METRIC_COLUMNS)
 
@@ -216,27 +216,6 @@ TOOL_SCHEMAS = [
                     },
                 },
                 "required": ["code", "profile"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "live_traffic_snapshot",
-            "description": (
-                "The ONLY tool that makes a live network call: a real-time, purely illustrative count of "
-                "aircraft currently near one airport's coordinates (from OpenSky Network's public API). "
-                "Use ONLY when the user explicitly asks what's happening at an airport right now / live / "
-                "at this moment. NEVER use this to answer any question about capacity, demand, delay, "
-                "scoring, ranking, or investability -- it is not part of the scoring model and carries no "
-                "statistical weight; every other tool in this system is the May 2026 dataset."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "code": {"type": "string", "enum": AIRPORT_CODE_ENUM, "description": "IATA airport code."},
-                },
-                "required": ["code"],
             },
         },
     },

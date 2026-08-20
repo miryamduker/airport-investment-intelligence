@@ -1,0 +1,101 @@
+# Scoring configuration: thresholds, confidence blending, metric polarity,
+# and pillar weights. Everything scoring/ reads comes from this file.
+#
+# "Implemented" is deliberately not a flag here -- scoring/score.py derives
+# it from whether the metric's column exists in mart_airport_metrics.parquet,
+# so a metric cannot claim to be implemented while nothing computes it.
+# Unimplemented metrics stay listed, with polarity, so the full four-pillar
+# model stays documented.
+
+thresholds:
+  # Minimum DEPARTURES_PERFORMED for an origin to enter the mart. Below one
+  # departure a day, one month of T-100 is too thin for a percentile to mean
+  # anything. Raise it and small airports vanish from the mart entirely.
+  min_departures_threshold: 30
+
+  # Which hub_size cohorts may appear in rankings. Not a threshold but a
+  # filter: percentile rank measures "unusual for its cohort", not "big
+  # enough to matter", so a thin month can float a non_hub to the top of its
+  # own cohort. Excluded from rankings, kept in the mart for descriptive
+  # queries like flight_mix. Labels must match ingest/airports.py --
+  # enforced by tests/test_config_consistency.py.
+  investable_hub_sizes: [large, medium, small]
+
+# Per-airport confidence blends three independent reliability signals
+# (scoring/score.py: compute_confidence). The three weights sum to 1 and are
+# a judgment call, not a fitted parameter. See DESIGN.md section 2.4.
+confidence:
+  # Share of implemented metrics with a real value for this airport.
+  metric_coverage_weight: 0.4
+  # How much traffic backs the percentile: ramps linearly to full confidence.
+  volume_weight: 0.3
+  # Departures/month at which volume confidence saturates. Lower it and
+  # nearly every airport reads as fully confident.
+  full_confidence_departures: 1000
+  # Distinct carriers reporting OTP data. No OTP match floors this at 0 --
+  # a confidence signal, not a metric value (metrics themselves stay NaN).
+  carrier_diversity_weight: 0.3
+  # Carrier count at which diversity confidence saturates. May 2026's
+  # observed range is 1-13 carriers, median 3.
+  full_confidence_carriers: 8
+
+# Polarity (+1 / -1) normalises direction so higher percentile always means
+# stronger candidate. Only metrics with a column in mart_airport_metrics
+# belong here -- scoring/score.py treats the mart as the source of truth for
+# "implemented", so a metric listed without one is silently skipped. The
+# full four-pillar design, including the growth_trajectory pillar this build
+# does not compute, is in DESIGN.md section 2.1.
+pillars:
+  demand_pressure:
+    metrics:
+      load_factor:
+        polarity: 1   # fuller flights = more demand pressure
+
+  capacity_strain:
+    # All four come from On-Time Performance, which covers reporting
+    # carriers only -- 134 of 135 investable hubs match for May 2026. The
+    # pillar is NaN for the rest: no imputation, the weight renormalises
+    # away. completion_gap was implemented and removed (docs/LIMITATIONS.md).
+    metrics:
+      nas_delay_per_departure:
+        polarity: 1   # more locally caused delay = more strain
+      taxi_out_p80:
+        polarity: 1   # longer taxi-out = more ground congestion
+      pct_delayed_15:
+        polarity: 1   # more late departures = more strain
+      cancellation_rate:
+        polarity: 1   # more cancellations = more strain
+
+  feasibility:
+    metrics:
+      runways_per_mpax:
+        polarity: 1   # more runway per passenger = more room to grow
+      slot_controlled:
+        polarity: -1  # a cap capital can't remove = weaker candidate
+
+# Pillar weights per use case: a documented judgment call, not a fitted
+# parameter. Weights are over the three pillars this build computes; the
+# composite renormalises again per airport over the pillars that airport
+# actually has (capacity_strain is NaN where there is no OTP match).
+# Rationale: DESIGN.md section 2.3.
+profiles:
+  terminal_expansion:
+    # Gate and terminal capital follows demand and how binding strain is;
+    # runway feasibility matters less.
+    demand_pressure: 0.40
+    capacity_strain: 0.40
+    feasibility: 0.20
+
+  airfield_expansion:
+    # Runway and taxiway capital follows whether the airfield is the binding
+    # constraint, and whether there is room to add to it.
+    demand_pressure: 0.25
+    capacity_strain: 0.35
+    feasibility: 0.40
+
+  general:
+    # No investment-type bias: as close to equal as three pillars allow.
+    # The extra 0.01 is a rounding artifact, not a preference.
+    demand_pressure: 0.3333
+    capacity_strain: 0.3333
+    feasibility: 0.3334

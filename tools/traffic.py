@@ -1,17 +1,13 @@
-"""Descriptive, non-scoring tools: flight_mix (T-100 route/carrier
-composition) and live_traffic_snapshot (the one live network call).
+"""Descriptive, non-scoring tool: flight_mix (T-100 route/carrier
+composition).
 
-Neither feeds the scoring model. live_traffic_snapshot is the only place in
-this system that leaves the frozen May 2026 dataset.
+It does not feed the scoring model. Like every other tool in this system it
+reads only the frozen May 2026 dataset -- there is no live data source.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 import pandas as pd
-import requests
 
-from ingest.common import ca_bundle_verify
 from tools import data as d
 from tools import format as f
 
@@ -28,11 +24,6 @@ HAUL_CAVEATS = [
     "passenger service.",
 ]
 
-LIVE_CAVEATS = [
-    "Illustrative only -- live aircraft positions near the airport, not used in scoring, ranking, or any composite score.",
-    "Aircraft are counted within an approximate bounding box around the airport's coordinates, not verified as arrivals/departures for this specific airport.",
-    "Anonymous OpenSky API access is rate-limited and state vectors can lag real time by up to ~15 seconds.",
-]
 
 
 def _origin_totals(con, code: str) -> pd.Series:
@@ -128,7 +119,7 @@ def flight_mix(code: str) -> dict:
     def share(passengers: float) -> float | None:
         return f.num(passengers / total_passengers, 4) if total_passengers else None
 
-    full_departures = d.weights_config()["confidence"]["full_confidence_departures"]
+    full_departures = d.scoring_config()["confidence"]["full_confidence_departures"]
 
     def band_share(value: float, total: float) -> float | None:
         return f.num(value / total, 4) if total else None
@@ -198,62 +189,4 @@ def flight_mix(code: str) -> dict:
             "underuse of larger aircraft relative to route demand.",
             *HAUL_CAVEATS,
         ],
-    }
-
-
-def live_traffic_snapshot(code: str) -> dict:
-    """Aircraft currently near an airport, from OpenSky. Illustrative only --
-    never an input to scoring, ranking, or any composite."""
-    code = code.upper()
-    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    def unavailable(found: bool, reason: str, caveat: str) -> dict:
-        return {
-            "code": code, "found": found, "available": False,
-            "as_of": now_iso,
-            "confidence": {"value": 0.0, "reason": reason},
-            "caveats": LIVE_CAVEATS + [caveat],
-        }
-
-    dim = d.dim_airport_df()
-    row = dim[dim["iata"] == code]
-    if row.empty:
-        return unavailable(False, "unknown airport code", "No OurAirports coordinate match for this code -- no live query attempted.")
-    row = row.iloc[0]
-    lat, lon = row["lat"], row["lon"]
-    if pd.isna(lat) or pd.isna(lon):
-        return unavailable(True, "no coordinate on file for this airport", "No latitude/longitude on file for this airport.")
-
-    cfg = d.live_traffic_config()
-    half = cfg["bbox_half_width_degrees"]
-    try:
-        response = requests.get(
-            cfg["opensky_states_url"],
-            params={"lamin": lat - half, "lamax": lat + half, "lomin": lon - half, "lomax": lon + half},
-            timeout=cfg["request_timeout_seconds"],
-            verify=ca_bundle_verify(),
-        )
-        response.raise_for_status()
-        payload = response.json()
-    except Exception as exc:
-        return unavailable(
-            True,
-            f"OpenSky request failed: {exc.__class__.__name__}",
-            "Live OpenSky request failed or timed out -- no traffic count available for this call.",
-        )
-
-    states = payload.get("states") or []
-    return {
-        "code": code, "found": True, "available": True,
-        "airport_name": row["name"],
-        "lat": f.num(lat, 4), "lon": f.num(lon, 4),
-        "bbox_half_width_degrees": half,
-        "aircraft_in_bbox": len(states),
-        "airborne": sum(1 for s in states if s[8] is False),
-        "on_ground": sum(1 for s in states if s[8] is True),
-        "sample_callsigns": sorted({(s[1] or "").strip() for s in states if s[1] and s[1].strip()})[:10],
-        "opensky_timestamp_epoch": payload.get("time"),
-        "as_of": now_iso,
-        "confidence": {"value": 0.4, "reason": "live spot-check, not validated against airport-specific arrival/departure records"},
-        "caveats": LIVE_CAVEATS,
     }

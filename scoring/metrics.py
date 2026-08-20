@@ -26,7 +26,7 @@ import yaml
 T100_PATH = Path("data/staging/t100_segment.parquet")
 DIM_AIRPORT_PATH = Path("data/staging/dim_airport.parquet")
 ONTIME_PATH = Path("data/staging/ontime_airport_monthly.parquet")
-WEIGHTS_CONFIG_PATH = Path("config/weights.yaml")
+SCORING_CONFIG_PATH = Path("config/scoring.yaml")
 OUT_PATH = Path("data/marts/mart_airport_metrics.parquet")
 
 
@@ -142,9 +142,9 @@ def print_build_report(
 
 
 def main() -> None:
-    weights_config = yaml.safe_load(WEIGHTS_CONFIG_PATH.read_text())
-    min_departures = weights_config["thresholds"]["min_departures_threshold"]
-    investable_hub_sizes = set(weights_config["thresholds"]["investable_hub_sizes"])
+    scoring_config = yaml.safe_load(SCORING_CONFIG_PATH.read_text())
+    min_departures = scoring_config["thresholds"]["min_departures_threshold"]
+    investable_hub_sizes = set(scoring_config["thresholds"]["investable_hub_sizes"])
 
     con = duckdb.connect()
     base_metrics, ranked = build_base_metrics(con, min_departures)

@@ -19,7 +19,7 @@ import yaml
 from scoring.score import score_airports
 
 MART_PATH = Path("data/marts/mart_airport_metrics.parquet")
-WEIGHTS_CONFIG_PATH = Path("config/weights.yaml")
+SCORING_CONFIG_PATH = Path("config/scoring.yaml")
 PROFILE = "general"
 
 
@@ -32,21 +32,21 @@ def metrics_df() -> pd.DataFrame:
 
 
 @pytest.fixture(scope="module")
-def weights_config() -> dict:
-    return yaml.safe_load(WEIGHTS_CONFIG_PATH.read_text())
+def scoring_config() -> dict:
+    return yaml.safe_load(SCORING_CONFIG_PATH.read_text())
 
 
-def test_scoring_is_byte_identical_across_runs(metrics_df, weights_config):
-    scored_a = score_airports(metrics_df, weights_config, PROFILE)
-    scored_b = score_airports(metrics_df, weights_config, PROFILE)
+def test_scoring_is_byte_identical_across_runs(metrics_df, scoring_config):
+    scored_a = score_airports(metrics_df, scoring_config, PROFILE)
+    scored_b = score_airports(metrics_df, scoring_config, PROFILE)
 
     csv_a = scored_a.to_csv(index=False).encode("utf-8")
     csv_b = scored_b.to_csv(index=False).encode("utf-8")
     assert csv_a == csv_b
 
 
-def test_region_filter_after_scoring_matches_national(metrics_df, weights_config):
-    national = score_airports(metrics_df, weights_config, PROFILE)
+def test_region_filter_after_scoring_matches_national(metrics_df, scoring_config):
+    national = score_airports(metrics_df, scoring_config, PROFILE)
     new_england = (
         national[national["region"] == "new_england"]
         .sort_values("code")
@@ -56,7 +56,7 @@ def test_region_filter_after_scoring_matches_national(metrics_df, weights_config
 
     # Filtering the already-scored national output is idempotent: doing it
     # from a freshly-recomputed national score gives the identical subset.
-    national_again = score_airports(metrics_df, weights_config, PROFILE)
+    national_again = score_airports(metrics_df, scoring_config, PROFILE)
     new_england_again = (
         national_again[national_again["region"] == "new_england"]
         .sort_values("code")
@@ -71,7 +71,7 @@ def test_region_filter_after_scoring_matches_national(metrics_df, weights_config
         metrics_df[metrics_df["region"] == "new_england"].reset_index(drop=True)
     )
     scored_region_only = (
-        score_airports(region_only_metrics, weights_config, PROFILE)
+        score_airports(region_only_metrics, scoring_config, PROFILE)
         .sort_values("code")
         .reset_index(drop=True)
     )

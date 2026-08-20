@@ -6,7 +6,16 @@ an airport the user didn't mean -- hence the explicit `ambiguous` flag.
 """
 from __future__ import annotations
 
+import re
+
 from tools import data as d
+
+
+def _city_parts(value: str) -> list[str]:
+    """OurAirports packs multiple served cities into one municipality field,
+    separated by commas or slashes: "Honolulu, Oahu", "Cincinnati / Covington",
+    "Greenville/Greer/Spartanburg". Each part is a name a user might type."""
+    return [p.strip().upper() for p in re.split(r"[,/]", value or "") if p.strip()]
 
 
 def _airport_summary(code: str) -> dict | None:
@@ -31,7 +40,7 @@ def _summaries(codes: list[str]) -> list[dict]:
 
 def resolve_airports(query: str) -> dict:
     """Match priority: exact IATA code > metro alias > region > state >
-    airport-name substring."""
+    city > airport-name substring."""
     raw_query = query
     upper = query.strip().upper()
     dim = d.dim_airport_df()
@@ -75,6 +84,30 @@ def resolve_airports(query: str) -> dict:
     if len(upper) == 2 and (dim["state"] == upper).any():
         codes = dim[dim["state"] == upper]["iata"].tolist()
         return result(_summaries(codes), False, "state", 1.0, "state abbreviation match")
+
+    # City match, before the substring fallback. 39 of the 135 investable
+    # hubs are named after a person, not their city -- SJU is "Luis Munoz
+    # Marin", LAS is "Harry Reid" -- so substring matching cannot reach them,
+    # and for SJU it actively resolved to UGI (San Juan /Uganik/ Seaplane
+    # Base, Alaska) instead. Exact city match, not substring, so "Portland"
+    # still returns both Portlands rather than silently picking one.
+    city_hits = dim[dim["city"].fillna("").map(lambda v: upper in _city_parts(v))]
+    if len(city_hits):
+        # Narrow to investable hubs first. A city often has one real airport
+        # plus general-aviation fields (Cincinnati: CVG and Lunken; Miami: MIA
+        # and Opa-locka; San Juan: SJU and Isla Grande). Where exactly one is
+        # an investable hub, that is unambiguously the one meant. Where two
+        # are -- Portland OR and Portland ME -- it stays ambiguous and the
+        # agent asks.
+        investable = set(d.scoring_config()["thresholds"]["investable_hub_sizes"])
+        hubs = city_hits[city_hits["hub_size"].isin(investable)]
+        chosen = hubs if len(hubs) else city_hits
+        matches = _summaries(chosen["iata"].tolist()[:8])
+        return result(
+            matches, len(matches) > 1, "city",
+            1.0 if len(matches) == 1 else 0.7,
+            "exact city match" if len(matches) == 1 else "several airports serve this city",
+        )
 
     # Prefer name matches that have mart data: a no-data collision (a seaplane
     # base, a private strip) shouldn't turn a real hub's clean match ambiguous.

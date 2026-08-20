@@ -33,7 +33,7 @@ def airport_profile(code: str) -> dict:
         return _not_found(
             code,
             "Unknown IATA code, or excluded by the minimum-departures threshold "
-            "(config/weights.yaml: thresholds.min_departures_threshold).",
+            "(config/scoring.yaml: thresholds.min_departures_threshold).",
         )
 
     mart_row = d.metrics_df().iloc[idx]
@@ -56,7 +56,7 @@ def airport_profile(code: str) -> dict:
     }
 
     composite_by_profile = {}
-    for profile in d.weights_config()["profiles"]:
+    for profile in d.scoring_config()["profiles"]:
         scored = d.scored(profile)
         row = scored[scored["code"] == code].iloc[0]
         composite_by_profile[profile] = {
@@ -94,8 +94,20 @@ def airport_profile(code: str) -> dict:
 
 
 def _classify(code: str, mart_row: pd.Series, pct_row: pd.Series, pillar_row: pd.Series) -> tuple[str, str]:
-    """The bottleneck decision tree. Thresholds and the rule order behind it
-    are documented in config/diagnosis.yaml."""
+    """The bottleneck decision tree. Cutoffs come from config/diagnosis.yaml;
+    the rule order below is code, and rests on two judgment calls:
+
+    - Slot control outranks every other signal. A regulatory cap on
+      operations is by definition a constraint capital cannot remove, so
+      JFK/LGA/DCA are regulatory_constrained however their pillars score.
+    - Splitting airfield_constrained from terminal_constrained compares
+      taxi_out_p80 (ground movement) against the mean of pct_delayed_15 and
+      cancellation_rate (schedule/turnaround). nas_delay_per_departure is
+      deliberately left out of the split: it does not cleanly separate
+      airfield from terminal causes. A documented boundary, not a fitted one.
+
+    weather_vulnerable, from the original design, is not reachable: see the
+    caveat in diagnose_unmet_demand."""
     cfg = d.diagnosis_config()
     high, low = cfg["high_percentile"], cfg["low_percentile"]
 
@@ -177,7 +189,7 @@ def diagnose_unmet_demand(code: str) -> dict:
         d.CAVEAT_LOAD_FACTOR_ONLY,
         "weather_vulnerable is not a possible diagnosis in this build: On-Time Performance's weather-specific "
         "delay cause is downloaded but never aggregated into the mart, so there is no weather-caused-delay "
-        "column to classify from (see config/diagnosis.yaml).",
+        "column to classify from.",
     ]
     missing_pillars = [
         p for p in ("demand_pressure", "capacity_strain", "feasibility") if pd.isna(pillar_row[p])
@@ -220,7 +232,7 @@ def explain_score(code: str, profile: str) -> dict:
     mart_row = d.metrics_df().iloc[idx]
     pct_row = d.percentiles().iloc[idx]
     pillar_row = d.pillar_scores().iloc[idx]
-    weights = d.weights_config()
+    weights = d.scoring_config()
     profile_weights = weights["profiles"][profile]
 
     metrics_detail = []

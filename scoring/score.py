@@ -94,7 +94,7 @@ def _confidence_reason(
 
 def compute_confidence(pctile_df: pd.DataFrame, metrics_df: pd.DataFrame, confidence_config: dict) -> pd.Series:
     """Per-airport confidence: a weighted blend of three reliability signals
-    (weights and rationale in config/weights.yaml).
+    (weights and rationale in config/scoring.yaml).
 
     - metric_coverage: share of implemented metrics with a real value here.
       Read off pctile_df, whose NaNs mirror the raw NaNs.
@@ -147,18 +147,18 @@ def compute_confidence(pctile_df: pd.DataFrame, metrics_df: pd.DataFrame, confid
     )
 
 
-def score_airports(metrics_df: pd.DataFrame, weights_config: dict, profile: str) -> pd.DataFrame:
+def score_airports(metrics_df: pd.DataFrame, scoring_config: dict, profile: str) -> pd.DataFrame:
     """One row per airport: identity columns, a score per pillar (NaN if
     unavailable), 'composite', and 'confidence'. Sorted by composite DESC,
     code ASC -- a deterministic tie-break; NaN composites sort last.
     """
-    pillars_config = weights_config["pillars"]
-    profile_weights = weights_config["profiles"][profile]
+    pillars_config = scoring_config["pillars"]
+    profile_weights = scoring_config["profiles"][profile]
 
     pctile_df = compute_metric_percentiles(metrics_df, pillars_config)
     pillar_df = compute_pillar_scores(pctile_df, pillars_config)
     composite = compute_composite(pillar_df, profile_weights)
-    confidence = compute_confidence(pctile_df, metrics_df, weights_config["confidence"])
+    confidence = compute_confidence(pctile_df, metrics_df, scoring_config["confidence"])
 
     result = metrics_df[IDENTITY_COLUMNS].copy()
     result = pd.concat([result, pillar_df], axis=1)
@@ -175,7 +175,7 @@ def score_airports(metrics_df: pd.DataFrame, weights_config: dict, profile: str)
     return result
 
 
-def filter_investable(scored_df: pd.DataFrame, weights_config: dict) -> pd.DataFrame:
+def filter_investable(scored_df: pd.DataFrame, scoring_config: dict) -> pd.DataFrame:
     """Apply the investability floor to an already-scored DataFrame.
 
     Percentiles are per hub_size cohort, so dropping non_hub rows here
@@ -183,5 +183,5 @@ def filter_investable(scored_df: pd.DataFrame, weights_config: dict) -> pd.DataF
     building investment rankings use this; callers that need every airport
     regardless of size (flight_mix) do not.
     """
-    investable_hub_sizes = set(weights_config["thresholds"]["investable_hub_sizes"])
+    investable_hub_sizes = set(scoring_config["thresholds"]["investable_hub_sizes"])
     return scored_df[scored_df["hub_size"].isin(investable_hub_sizes)].reset_index(drop=True)

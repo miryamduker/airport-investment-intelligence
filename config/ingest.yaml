@@ -1,27 +1,33 @@
-# Ingest-time filters. Scoring thresholds live in config/weights.yaml; this
-# file defines "passenger service" at the raw-data layer, against BTS's own
-# lookup tables (docs/DATA_RECON.md).
+# Ingest-time filters, applied at the raw-data layer against BTS's own
+# lookup tables. Scoring thresholds live in config/scoring.yaml.
 
 t100_segment:
-  # BTS lookup table L_SERVICE_CLASS: F = Scheduled Passenger/Cargo,
-  # L = Non-Scheduled Civilian Passenger/Cargo. The excluded G and P are the
-  # all-cargo classes, verified to carry ~0 passengers nationally.
-  # AIRCRAFT_CONFIG is deliberately not AND-ed in: 325,517 real passengers
-  # in the May 2026 pull fly on combi/seaplane aircraft it would drop.
+  # BTS lookup L_SERVICE_CLASS: F = Scheduled Passenger/Cargo, L =
+  # Non-Scheduled Civilian Passenger/Cargo. Excluding these is what keeps
+  # all-cargo (G, P) out of every passenger figure -- drop the filter and
+  # Anchorage measures freighters. See docs/DATA_RECON.md.
   passenger_service_classes: ["F", "L"]
 
-# Hub-size cohorts, from each airport's share of national T-100 passengers.
-# The FAA's own classification (49 U.S.C. 47102) uses a full calendar year;
-# this build has one month, so these are a proxy, not an FAA determination.
+# OurAirports iso_country values that count as "US" for this build. The
+# territories carry their own ISO codes, so filtering on "US" alone silently
+# drops SJU (541k May 2026 passengers -- a medium hub) plus STT, GUM, BQN,
+# STX, PSE, SPN and PPG. T-100 also lists foreign origins for US carriers'
+# overseas segments (MX, CA, BS, ...); those stay excluded.
+# Must stay in step with the `territories` entry in config/regions.yaml.
+iso_countries: ["US", "PR", "VI", "GU", "AS", "MP"]
+
+# Cohort boundaries, as share of national T-100 passengers. These produce
+# the labels large/medium/small/non_hub in ingest/airports.py, which
+# config/scoring.yaml (thresholds.investable_hub_sizes) then filters on --
+# the two must agree, enforced by tests/test_config_consistency.py.
+# A one-month proxy for the FAA's classification, not an FAA determination.
 hub_size:
   large_min_share: 0.01     # >= 1% of national passengers
   medium_min_share: 0.0025  # 0.25% - 1%
   small_min_share: 0.0005   # 0.05% - 0.25%
   # below small_min_share -> non_hub
 
-# Airports where the FAA caps scheduled operations by regulatory order:
-# the JFK/LGA orders (extended to 2028) and the DCA slot rule (49 U.S.C.
-# 41714, 14 CFR part 93), confirmed current for the 2026 season on
-# 2026-08-19. Hardcoded, not derived from any ingested table -- revisit it
-# if an order lapses or another airport is added.
+# Airports where the FAA caps scheduled operations by regulatory order.
+# Hardcoded, not derived from any ingested table: revisit if an order lapses
+# or another airport is added. Confirmed current for 2026 on 2026-08-19.
 slot_controlled_airports: ["JFK", "LGA", "DCA"]
