@@ -12,7 +12,7 @@ support) and [docs/DATA_RECON.md](docs/DATA_RECON.md) (how the data was obtained
 
 ## Demo
 
-[Watch the demo]([https://drive.google.com/...](https://drive.google.com/file/d/1-BmnHdGlUlgsa7cyA1xAUgvl2AM_Pc8b/view?usp=sharing))
+[Watch the demo](https://drive.google.com/file/d/1-BmnHdGlUlgsa7cyA1xAUgvl2AM_Pc8b/view?usp=sharing)
 
 ## Setup
 
