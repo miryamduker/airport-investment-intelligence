@@ -1,0 +1,22 @@
+# Haul-length bands for flight_mix (tools/traffic.py), applied to T-100
+# Segment's DISTANCE column (statute miles, great-circle, per segment).
+#
+# The 2,500-mile long-haul floor is a documented judgment call, not an
+# industry constant, and it moves the answer more than the data source does.
+# Rationale and the sensitivity table: docs/LIMITATIONS.md, "Long haul is a
+# configured cutoff". User-facing wording: HAUL_CAVEATS in tools/traffic.py.
+
+# Half-open intervals [min_miles, max_miles). max_miles: null is unbounded.
+# Must stay ordered and contiguous -- flight_mix bins every row into exactly
+# one band, so a gap silently drops departures from the shares. Enforced by
+# tests/test_haul_mix.py::test_bands_are_ordered_and_contiguous.
+bands:
+  - name: short_haul
+    min_miles: 0
+    max_miles: 1500
+  - name: medium_haul
+    min_miles: 1500
+    max_miles: 2500
+  - name: long_haul
+    min_miles: 2500
+    max_miles: null

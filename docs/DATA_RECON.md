@@ -1,0 +1,223 @@
+# Data Recon Findings
+
+How each data-access path was confirmed, against the Socrata catalog API and
+the BTS TranStats system. Recon date: 2026-08-19; findings below are settled
+and reflected in `ingest/`.
+
+## Critical finding: data.bts.gov (Socrata) does not host the row-level tables
+
+AGENTS.md assumes T-100 Segment and On-Time Performance are "accessed via the
+BTS Socrata REST API at data.bts.gov." **This is not correct for the grain we
+need.**
+
+I searched the Socrata catalog API (`api.us.socrata.com/api/catalog/v1`,
+`domains=data.bts.gov`) three ways: by query term, and by pulling all 597
+assets on the domain and grepping locally for T-100/on-time/delay keywords,
+since the hosted search returned 0 results for "T-100 Segment" even though
+matching assets exist. Every T-100/On-Time-related asset on that domain is
+one of:
+
+- **Pre-aggregated summary tables** ("AFF - T100 Segment Summary [By Origin
+  Airport / By Carrier / By Country / Monthly]") — grain is national or
+  single-dimension monthly totals (e.g. `r495-tyji` is airport × month, with
+  no carrier, no destination, no aircraft/cargo split). Not the
+  carrier × origin × dest × month grain the thesis needs.
+- **Non-tabular Socrata objects** (`type: measure`, `chart`, `story`) — e.g.
+  `56fa-sf82` "U.S. Marketing Air Carriers On-time Performance" and `fjyj-2qqx`
+  "Flights" both return `403 no row or column access to non-tabular tables`
+  when queried via the standard resource API. They're dashboard visuals, not
+  queryable datasets.
+
+**The actual row-level T-100 Segment and On-Time Performance (ASQP) tables
+live on the legacy TranStats system** (`transtats.bts.gov`), not on
+data.bts.gov/Socrata. I confirmed this two ways:
+
+1. `DL_SelectFields.aspx` (the TranStats download form) has live pages for
+   both tables, with year selectors showing **T-100: 1990–2026**,
+   **On-Time Performance: 1987–2026**.
+2. `transtats.bts.gov/PREZIP/` is a bulk-cache directory containing
+   pre-generated `.zip` extracts of past download requests, including files
+   named `T_T100_SEGMENT_ALL_CARRIER.zip` and `T_ONTIME.zip`. I downloaded
+   one of each to confirm real column names and data.
+
+**This changed the ingest design.** TranStats downloads are driven by an
+ASP.NET web form (viewstate/postback), not a REST endpoint, so `ingest/` is
+not a Socrata client for these two sources. Resolved by replicating the form
+POST — the field-selection form posts to itself with hidden `__VIEWSTATE` —
+in `ingest/transtats.py`, shared by both table modules. The two alternatives
+considered and not needed: an official BTS bulk API/FTP, and a
+`data.transportation.gov` mirror.
+
+### Caveat on the sample data below (superseded)
+
+The field inventory below was read off the stale `PREZIP` cache during
+recon, before the live form-post worked. The "NOT CONFIRMED" rows were all
+confirmed present by the real pull — see the T-100 update further down. It
+is kept as a record of what was knowable at the time.
+
+The `PREZIP` cache files are **not authoritative** — they're leftover
+extracts from other users' past requests, all last-modified **9/2/2015**,
+each reflecting whatever subset of fields that requester happened to select.
+The T-100 file I could access has only 9 columns (no `PASSENGERS`, `SEATS`,
+`CLASS`, or `AIRCRAFT_CONFIG` — the exact cargo/passenger and upgauge fields
+the thesis depends on). I could not confirm those columns exist or verify
+their distinct values from this sample; that requires either a full-field
+form submission or another source. Treat everything below as "columns
+confirmed to exist in *some* extract," not a complete or current schema.
+
+## OurAirports and FAA TAF
+
+OurAirports needed no investigation: a plain public CSV
+(`davidmegginson.github.io/ourairports-data`), no form, no obfuscated
+params, no proxy quirks beyond the `BTS_CA_BUNDLE` handling every `ingest/`
+module uses. See `ingest/airports.py`.
+
+FAA TAF was never ingested, which is why `growth_trajectory` has no
+implemented metric (docs/LIMITATIONS.md).
+
+## Field inventory
+
+| field name | source | what it gives us | populated? | notes |
+|---|---|---|---|---|
+| `UNIQUE_CARRIER` | T-100 Segment (TranStats, sample extract) | carrier code | yes | matches AGENTS.md grain |
+| `UNIQUE_CARRIER_NAME` | T-100 Segment | carrier full name | yes | |
+| `ORIGIN_AIRPORT_ID`, `ORIGIN` | T-100 Segment | origin airport (numeric id + IATA-ish code) | yes | |
+| `DEST_AIRPORT_ID`, `DEST` | T-100 Segment | destination airport | yes | |
+| `AIRCRAFT_TYPE` | T-100 Segment | aircraft type code | yes | not the same as an explicit passenger/cargo config flag |
+| `MONTH` | T-100 Segment | reporting month | yes | **no `YEAR` column in this extract** — open question, other extracts on Socrata (e.g. `bu82-4pwz`) do carry `year` |
+| `FREIGHT` | T-100 Segment | freight volume | yes | presence suggests cargo-only segments are mixed in; passenger-service filter still needs a real config/class column, not confirmed in this sample |
+| `PASSENGERS`, `SEATS`, `DEPARTURES_SCHEDULED`, `DEPARTURES_PERFORMED`, `DISTANCE`, `CLASS`, `AIRCRAFT_CONFIG` | T-100 Segment | core volume metrics + the cargo/passenger indicator AGENTS.md calls for | **NOT CONFIRMED** | absent from the accessible sample; need full-field pull to verify names, types, and distinct values |
+| `UNIQUE_CARRIER` | On-Time Performance | carrier code | yes | |
+| `ORIGIN_AIRPORT_ID`, `DEST_AIRPORT_ID` | On-Time Performance | route endpoints | yes | |
+| `CRS_DEP_TIME`, `DEP_TIME`, `DEP_DELAY` | On-Time Performance | scheduled/actual departure, delay minutes | yes | |
+| `TAXI_OUT` | On-Time Performance | taxi-out minutes | **97.5% non-null** (of 621,559 rows) | matches AGENTS.md's "taxi-out p80" metric need |
+| `TAXI_IN` | On-Time Performance | taxi-in minutes | yes | |
+| `ARR_TIME`, `ARR_DELAY` | On-Time Performance | arrival time/delay | yes | |
+| `CARRIER_DELAY` | On-Time Performance | carrier-caused delay minutes | **24.2% non-null** | |
+| `WEATHER_DELAY` | On-Time Performance | weather-caused delay minutes | **24.2% non-null** | |
+| `NAS_DELAY` | On-Time Performance | NAS (system/congestion) delay minutes | **24.2% non-null** | this is the column AGENTS.md says to use for capacity strain — confirmed present |
+| `SECURITY_DELAY` | On-Time Performance | security-caused delay minutes | 24.2% non-null | |
+| `LATE_AIRCRAFT_DELAY` | On-Time Performance | delay from late inbound aircraft | **24.2% non-null** | |
+| `QUARTER` | On-Time Performance | reporting quarter | yes | **no `YEAR`/`MONTH`/`FL_DATE` in this extract** — same open question as T-100; another extract selection needed |
+
+The four delay-cause columns being null on the same ~76% of rows is expected
+BTS behavior, not a data quality problem: cause-level breakdown is only
+reported for flights delayed ≥15 minutes (or cancelled/diverted per BTS
+rules), so the non-null rate should roughly track the fraction of delayed
+flights in the sample.
+
+## Update 2026-08-19: T-100 Segment ingest path resolved
+
+Items 1-3 below (for T-100 Segment only; On-Time Performance is still open)
+are resolved by [`ingest/t100.py`](../ingest/t100.py):
+
+- **Access path**: `DL_SelectFields.aspx` is a real ASP.NET form
+  (`GET` for `__VIEWSTATE`/`__EVENTVALIDATION`, then `POST` the field
+  checkboxes + `cboYear`/`cboPeriod`) that returns a freshly generated zip,
+  not the stale 2015 `PREZIP` cache. Confirmed by fetching and parsing the
+  live form rather than guessing field names.
+- **CLASS / AIRCRAFT_CONFIG confirmed**: both are real checkboxes on the
+  form, and BTS publishes their code tables at
+  `Download_Lookup.asp?Y11x72=Y_fReiVPR_PYNff` (CLASS) and
+  `..._NVePeNSg_PbaSVT` (AIRCRAFT_CONFIG), also ROT13-obfuscated. Passenger
+  service = `CLASS in ("F", "L")` (Scheduled / Non-Scheduled Civilian
+  Passenger-Cargo). `AIRCRAFT_CONFIG == 1` was considered as an additional
+  hard filter but rejected: in the May 2026 pull, 658 rows with
+  `CLASS in ("F","L")` have `AIRCRAFT_CONFIG != 1` (combi/seaplane aircraft)
+  and still carry 325,517 real passengers, so AND-ing it in would silently
+  drop legitimate passenger volume. `G`/`P` (all-cargo classes) carry ~0
+  passengers nationally, confirming they're correctly excluded.
+- **YEAR/MONTH present**: full-field pull has both, plus `QUARTER`.
+- Latest month with data published as of this recon: **May 2026** (June
+  2026 returns the form's HTML error page instead of a zip).
+
+## Update 2026-08-19: DEPARTURES_SCHEDULED is unreliable, completion_gap removed
+
+`scoring/metrics.py` originally computed `completion_gap = 1 -
+DEPARTURES_PERFORMED/DEPARTURES_SCHEDULED` as the capacity_strain pillar's
+one implemented metric. Investigating an outlier (Iliamna, AK: 1 scheduled
+vs. 84 performed, gap = -111) surfaced a much bigger problem than a small
+Alaska-bush edge case:
+
+- **362 of 588 surviving airports (62%) show DEPARTURES_PERFORMED >
+  DEPARTURES_SCHEDULED**, and the gap gets *worse*, not better, at major
+  hubs: JFK +3,281 departures (+23% over scheduled), LAX +3,014 (+17%),
+  MIA +2,243 (+17%), SFO +1,372 (+9%), ORD +1,626 (+4%), ATL +453 (+1%).
+- Ruled out non-scheduled (`CLASS = 'L'`) flights inflating the aggregate:
+  splitting by `CLASS` at JFK/ORD/ATL/LAX/DCA shows `L`-class contributes
+  at most ~150 performed departures with `DEPARTURES_SCHEDULED = 0` (expected,
+  charters aren't scheduled) -- nowhere near enough to explain the gap.
+  Even `CLASS = 'F'` alone at JFK is 14,197 scheduled vs. 17,459 performed.
+- Most plausible explanation: `DEPARTURES_SCHEDULED` reflects the schedule
+  as originally filed; carriers add sections, retime flights, and amend
+  schedules after filing, especially at high-churn hubs, without that
+  showing up as an increase to `DEPARTURES_SCHEDULED`. That means the
+  scheduled-vs-performed gap is measuring carrier schedule-filing/amendment
+  behavior, not airport capacity strain -- the opposite of what the metric
+  was meant to capture, and worst exactly at the large hubs the investment
+  thesis cares most about.
+
+**Decision: `completion_gap` is removed rather than tolerance-clipped.** A
+metric that looks like signal but measures something else is worse than an
+absent one. `capacity_strain` is now built entirely from On-Time Performance
+instead -- see the next section.
+
+## Update 2026-08-19: On-Time Performance ingest path resolved
+
+`ingest/ontime.py` downloads and aggregates one month of On-Time Performance
+(ASQP) the same way `ingest/t100.py` does -- form-post to
+`DL_SelectFields.aspx`, fresh `__VIEWSTATE`/`__EVENTVALIDATION` tokens each
+run. The table's own obfuscated querystring is `gnoyr_VQ=FGJ`,
+`QO_fu146_anzr=b0-gvzr`; confirmed by fetching that exact URL and checking
+the returned page's header text: "On-Time : Reporting Carrier On-Time
+Performance (1987-present)". (These two known-good parameter values came
+from a published example, not decoded from BTS's obfuscation scheme --
+unlike T-100's `FMG`/`Nv4 Pn44vr45`, the digit characters mixed into these
+obfuscated strings aren't a plain ROT13 of the display name, and reverse-
+engineering that scheme wasn't worth the time when a confirmed-working URL
+was available and independently verified against the live form.)
+
+Two things worth knowing before building on top of this:
+
+- **The export CSV's column headers don't match the field-selection
+  checkbox names.** Unlike T-100 Segment (export headers = checkbox names
+  exactly), On-Time Performance's export uses BTS's older "friendly name"
+  headers (`NASDelay`, `TaxiOut`, `Reporting_Airline`, `Cancelled`, ...)
+  regardless of which requested fields were checked -- the export always
+  included all ~110 available columns. `ingest/ontime.py`'s
+  `CSV_COLUMN_RENAME` maps the ones it needs back to the checkbox-style
+  names used elsewhere in `ingest/` for consistency.
+- **On-Time Performance covers far fewer airports than T-100.** Only
+  "reporting carriers" (roughly: airlines above a DOT-set share of
+  domestic scheduled passenger revenue) are required to report ASQP data,
+  so small regional/commuter/charter activity that T-100 captures is
+  largely absent here. May 2026: 347 distinct origins in the OTP pull vs.
+  809 US-matched T-100 origins. Restricted to the airports that actually
+  matter for an investment ranking (`investable_hub_sizes`:
+  large/medium/small, `config/scoring.yaml`), coverage is much better:
+  **134 of 135** have a May 2026 OTP match; only `HVN` doesn't. Any
+  capacity_strain metric is `NaN` for airports T-100 sees but OTP doesn't
+  -- expected, not a bug, and it's exactly why `scoring/score.py`'s
+  per-airport confidence calc factors in `reporting_carrier_count`.
+
+Output: `data/staging/ontime_airport_monthly.parquet`, one row per
+`(ORIGIN, YEAR, MONTH)`: `flights`, `completed_departures`,
+`nas_delay_per_departure`, `taxi_out_p80`, `pct_delayed_15`,
+`cancellation_rate`, `reporting_carrier_count`. `nas_delay_per_departure`
+and `pct_delayed_15` divide by `completed_departures` (`CANCELLED = 0`),
+not total flights -- a cancelled flight isn't a low-delay departure.
+`cancellation_rate` (cancelled / all scheduled OTP flights) replaces the
+capacity-strain signal `completion_gap` was meant to capture, sourced
+entirely from OTP's own row count rather than T-100's unreliable
+`DEPARTURES_SCHEDULED`. Sanity check on the May 2026 pull: the airports
+with the highest `taxi_out_p80` are dominated by exactly the major hubs
+you'd expect from ground congestion (ORD 36.0 min, JFK 36.0 min, LGA 33.0
+min, SFO 32.0 min) -- a good sign this metric behaves sensibly now that
+it's wired into `capacity_strain` (`scoring/metrics.py`'s `join_ontime`).
+
+## Environment note
+
+Outbound HTTPS on the development machine is intercepted by a TLS-inspecting
+network filter whose root CA is trusted at the OS level but not by Python's
+`certifi` store. Handled by `ingest/common.py`'s `BTS_CA_BUNDLE` env var; see
+README.md for how to build the combined bundle.

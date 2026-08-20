@@ -1,0 +1,9 @@
+duckdb==1.5.5
+fastapi==0.115.12
+openai==3.3.0
+pandas==2.2.3
+python-dotenv==1.1.0
+PyYAML==6.0.2
+pytest==9.1.1
+requests==2.32.3
+uvicorn==0.34.2

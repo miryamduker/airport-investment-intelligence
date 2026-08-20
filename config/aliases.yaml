@@ -1,0 +1,46 @@
+# Curated query aliases for resolve_airports (tools/lookup.py). The resolver
+# tries: exact IATA code > metro alias (this file) > region > state > city >
+# airport-name substring. The city step matches OurAirports' municipality
+# field, which covers most "name a city" queries on its own -- Boston, Las
+# Vegas, Honolulu and San Juan all resolve without an entry here.
+#
+# This file is the residue that city matching cannot reach:
+#
+#   1. Multi-airport metros, where resolving to one airport would be a guess.
+#      Any entry with more than one code returns ambiguous: true, which stops
+#      the agent and makes it ask. That is the point of those entries.
+#   2. Names that are not a municipality at all -- shorthand ("DC", "NYC") and
+#      territory names ("Guam", "Puerto Rico").
+#   3. Airports whose OurAirports municipality disagrees with the city BTS
+#      assigns them, where the city step lands on the WRONG airport. These are
+#      single-code on purpose: "Sanford" otherwise resolves to SFM in Maine,
+#      and "Bend" to SBN (South Bend, Indiana).
+#
+# Keys match case-insensitively; codes must exist in dim_airport.parquet.
+# Both invariants are enforced by tests/test_config_consistency.py.
+metro_aliases:
+  # 1. Multi-airport metros -- deliberately ambiguous
+  LA: [LAX, BUR, LGB, ONT, SNA]
+  LOS ANGELES: [LAX, BUR, LGB, ONT, SNA]
+  NYC: [JFK, LGA, EWR]
+  NEW YORK: [JFK, LGA, EWR]
+  NEW YORK CITY: [JFK, LGA, EWR]
+  BAY AREA: [SFO, OAK, SJC]
+  SAN FRANCISCO BAY AREA: [SFO, OAK, SJC]
+  DC: [DCA, IAD, BWI]
+  WASHINGTON: [DCA, IAD, BWI]
+  WASHINGTON DC: [DCA, IAD, BWI]
+  WASHINGTON D.C.: [DCA, IAD, BWI]
+  CHICAGO: [ORD, MDW]
+  HOUSTON: [IAH, HOU]
+  DALLAS: [DFW, DAL]
+
+  # 2. Territory names -- not a municipality anywhere
+  PUERTO RICO: [SJU]
+  GUAM: [GUM]
+
+  # 3. BTS city disagrees with OurAirports municipality, and the city step
+  #    would otherwise resolve to a different airport entirely
+  SANFORD: [SFB]        # municipality is "Orlando"; SFM is Sanford, Maine
+  BEND: [RDM]           # municipality is "Redmond"; SBN is South Bend, IN
+  PANAMA CITY: [ECP]    # municipality is "Panama City Beach"; PAM is Tyndall AFB

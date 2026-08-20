@@ -1,0 +1,9 @@
+# Percentile cutoffs for diagnose_unmet_demand (tools/diagnostics.py).
+# These two numbers are the whole file: the branch order and the
+# airfield-vs-terminal split are code, documented in tools/diagnostics.py.
+# Percentiles are within-hub_size-cohort, as everywhere else in this build.
+
+# A pillar percentile at or above this is "high" for that airport's cohort.
+high_percentile: 75
+# A pillar percentile at or below this is "low" for that airport's cohort.
+low_percentile: 25

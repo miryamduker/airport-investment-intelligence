@@ -1,0 +1,9 @@
+data/raw/
+data/staging/
+data/marts/
+.env
+__pycache__/
+*.pyc
+.venv/
+.cache/
+.pytest_cache/
