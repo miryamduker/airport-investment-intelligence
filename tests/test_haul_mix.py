@@ -3,7 +3,7 @@
 1. The bands in config/haul.yaml bin every departure exactly once, so the
    shares are a real decomposition and not a subset that happens to look
    like one.
-2. The same call twice returns identical output (CLAUDE.md's core rule --
+2. The same call twice returns identical output (AGENTS.md's core rule --
    the arithmetic is Python's, not the model's).
 3. The band arithmetic matches an independent recomputation from the
    staging parquet.

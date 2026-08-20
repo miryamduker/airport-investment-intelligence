@@ -1,6 +1,6 @@
 """System prompt for the airport investment intelligence agent.
 
-CLAUDE.md's one rule that matters: "The language model must never produce a
+AGENTS.md's one rule that matters: "The language model must never produce a
 number." Every figure the model utters must be traceable to a specific tool
 call's JSON. This prompt exists to make that operational, not just aspirational.
 """

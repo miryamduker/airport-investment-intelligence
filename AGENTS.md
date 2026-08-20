@@ -55,32 +55,36 @@ Non-negotiable filters:
 
 ### Current implementation scope
 
-This build uses **one recent month of T-100 Segment** (currently May 2026,
-the latest published on TranStats — see `docs/DATA_RECON.md`), not a
-multi-month history. That is a deliberate scoping decision, not a gap:
+This build uses **one recent month** of T-100 Segment and On-Time
+Performance (May 2026, the latest published on TranStats — see
+`docs/DATA_RECON.md`), not a multi-month history. A deliberate scoping
+decision, not a gap:
 
-- **On-Time Performance is a stretch goal.** Capacity-strain metrics that
-  depend on it (NAS delay per departure, taxi-out p80, completion gap) are
-  not yet implemented.
+- **Capacity strain is implemented** from On-Time Performance: NAS delay per
+  departure, taxi-out p80, pct delayed 15+, cancellation rate. `completion
+  gap` was implemented and removed — `DEPARTURES_SCHEDULED` is unreliable at
+  scale (see `docs/LIMITATIONS.md`).
 - **Growth trajectory** (3y passenger CAGR, TAF forecast growth) and
   **peak-month concentration** (part of Demand pressure) are specified in
-  the scoring model below but not implemented — both need multi-month T-100
-  history that this build does not ingest.
+  the scoring model below but not implemented — both need multi-month
+  history this build does not ingest.
 
 ## Layout
 
 ```
-ingest/      API clients, refresh_data.py
+ingest/      one module per source, over a shared TranStats form client
 data/
   raw/       as downloaded, never edited
   staging/   typed, filtered
-  marts/     mart_airport_metrics, mart_airport_scores, mart_routes
-scoring/     pillars, percentiles, weights, diagnosis
-tools/       the eight agent tools
-agent/       loop, tool schemas, system prompt
-config/      weights.yaml
+  marts/     mart_airport_metrics
+scoring/     metrics.py builds the mart; score.py is pure scoring
+tools/       the seven agent tools, grouped by question type
+             (lookup, ranking, diagnostics, traffic) over data.py
+agent/       loop, system prompt
+api/         FastAPI wrapper
+config/      weights, regions, aliases, thresholds
 tests/
-web/         React app (later)
+web/         React chat view
 ```
 
 ## Scoring
@@ -104,7 +108,7 @@ airport in any region score 100 by definition.
 Every metric declares a polarity (+1 / -1) in config so higher always means
 stronger candidate.
 
-Weights live in `config/weights.yaml` with three profiles:
+Weights live in `config/scoring.yaml` with three profiles:
 `terminal_expansion`, `airfield_expansion`, `general`. They are a documented
 judgment call, not a fitted parameter.
 
@@ -113,7 +117,7 @@ Ties break deterministically: `ORDER BY score DESC, code ASC`.
 ## Tools
 
 `resolve_airports`, `rank_airports`, `compare_airports`, `airport_profile`,
-`flight_mix`, `diagnose_unmet_demand`, `explain_score`, `live_traffic_snapshot`
+`flight_mix`, `diagnose_unmet_demand`, `explain_score`
 
 Rules:
 - **No generic SQL tool, ever.** The model must not compose queries.

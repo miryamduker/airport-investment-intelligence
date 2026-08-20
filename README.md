@@ -1,7 +1,10 @@
 # Airport Investment Intelligence Agent
 
-See [CLAUDE.md](CLAUDE.md) for the project brief and [docs/DATA_RECON.md](docs/DATA_RECON.md)
-for how the data access paths were confirmed.
+**Start with [DESIGN.md](DESIGN.md)**: scoring methodology, tradeoffs, and where
+AI is used. This file is setup and how to run things.
+
+Also: [docs/LIMITATIONS.md](docs/LIMITATIONS.md) (what the numbers can and can't
+support) and [docs/DATA_RECON.md](docs/DATA_RECON.md) (how the data was obtained).
 
 ## Setup
 
@@ -9,46 +12,40 @@ for how the data access paths were confirmed.
 python -m pip install -r requirements.txt
 ```
 
-### TLS-intercepting network filters
+## Quick start
 
-If your network runs a TLS-inspecting proxy or content filter (common on
-corporate and managed networks), its root CA is trusted at the OS level but
-not by Python's `certifi` trust store, so `requests` calls to
-`transtats.bts.gov` will fail with an SSL certificate error. Fix it with a CA
-bundle that includes both the standard `certifi` roots and your proxy's root
-CA.
+Runs the chat UI against the marts already in `data/`. Building those from
+source is the Ingest sections below; you only need them starting from scratch.
 
-Build one once (replace `YOUR_PROXY_NAME` with a substring that matches your
-proxy's certificate in the Windows trust store -- check
-`Cert:\LocalMachine\Root` in PowerShell if you're not sure what to search for):
+Two processes, two terminals. The API needs `OPENAI_API_KEY` in a `.env` at the
+repo root -- it refuses to start without one.
 
-```powershell
-$out = "$PWD\.cache"
-New-Item -ItemType Directory -Force -Path $out | Out-Null
+Terminal 1, the API on port 8000:
 
-$certifiPath = python -c "import certifi; print(certifi.where())"
-Copy-Item $certifiPath "$out\combined_ca_bundle.pem" -Force
-
-$proxyCerts = Get-ChildItem -Path Cert:\LocalMachine\Root | Where-Object { $_.Subject -like "*YOUR_PROXY_NAME*" }
-foreach ($c in $proxyCerts) {
-  $b64 = [System.Convert]::ToBase64String($c.GetRawCertData(), [System.Base64FormattingOptions]::InsertLineBreaks)
-  "-----BEGIN CERTIFICATE-----`n$b64`n-----END CERTIFICATE-----" | Out-File -Append -Encoding ascii "$out\combined_ca_bundle.pem"
-}
+```
+python -m uvicorn api.main:app --port 8000
 ```
 
-Then point ingest scripts at it:
+Terminal 2, the web UI:
 
-```powershell
-$env:BTS_CA_BUNDLE = "$PWD\.cache\combined_ca_bundle.pem"
+```
+cd web
+npm install
+npm run dev
 ```
 
-`BTS_CA_BUNDLE` is read by `ingest/common.py`'s `ca_bundle_verify()`, used by
-every `ingest/` module, and passed as `requests`'s `verify=` argument. If
-unset, requests falls back to the default `certifi` trust store, which is
-the right behavior on a network without TLS interception.
+Then open the URL Vite prints -- `http://localhost:5173`, or the next free port
+if something already holds that one. The UI checks the API on load and tells you
+if it isn't up.
 
-`.cache/` is machine-specific and is gitignored -- regenerate it on any new
-machine rather than copying it.
+For the same agent in the terminal, with every tool call printed above each
+reply and no `npm` involved:
+
+```
+python -m cli
+```
+
+Both are covered in more detail under [Running the chat UI](#running-the-chat-ui).
 
 ## Ingest: T-100 Segment
 
@@ -103,13 +100,100 @@ python -m scripts.show_ranking
 
 `scoring/metrics.py` joins T-100, the airport dimension, and On-Time
 Performance into `data/marts/mart_airport_metrics.parquet` (one row per
-surviving origin airport) and prints threshold/coverage diagnostics.
-`scoring/score.py` turns that into percentile-based pillar scores and a
-weighted composite per `config/weights.yaml`; `scripts/show_ranking.py`
-prints the national top 10 and the full New England ranking.
+surviving origin airport) and prints a build report. `scoring/score.py`
+turns that into percentile-based pillar scores and a weighted composite per
+`config/scoring.yaml`; `scripts/show_ranking.py` prints the national top 10
+and the full New England ranking.
+
+## Terminal chat
+
+```
+python -m cli
+```
+
+Prints every tool call (name, arguments, full JSON result) above each
+reply, so a transcript shows exactly which numbers came from where.
 
 ## Tests
 
 ```
 python -m pytest tests/ -v
 ```
+
+`test_reproducible.py` and `test_config_consistency.py` cover the scoring
+model; `test_agent_loop.py` and `test_api.py` cover the agent loop and the HTTP
+layer against a fake OpenAI client, so the whole suite runs with no API key and
+no network.
+
+## Running the chat UI
+
+Two processes: the FastAPI backend and the Vite dev server for `web/`.
+
+### 1. Backend
+
+Needs `OPENAI_API_KEY` set (`.env` in the repo root, read via `python-dotenv`).
+
+```
+python -m uvicorn api.main:app --port 8000
+```
+
+It refuses to start without `OPENAI_API_KEY` rather than failing on the first
+question. Two endpoints:
+
+- `POST /chat`, taking `{message, history}` and returning
+  `{reply, tool_calls, as_of}`. `message` is capped at 2,000 characters and
+  `history` at 40 turns, so an oversized request is rejected before it becomes
+  a paid model call.
+- `GET /health`, returning the model name and the data vintage. The web UI
+  calls it on load, so an unreachable backend is visible before you type a
+  question rather than after waiting on one.
+
+A failure at the model provider comes back as a readable status and `detail`
+(502 for a bad key, 429 for rate limiting, 504 for a timeout) rather than a
+bare 500. Set `LOG_LEVEL=DEBUG` to see every model call and tool call.
+
+**No auth, no rate limiting.** This is a localhost tool running against the
+operator's own API key -- deliberately not hardened for public exposure. Do not
+put it on a public interface without putting something in front of it.
+
+### 2. Frontend
+
+```
+cd web
+npm install
+npm run dev
+```
+
+Opens on `http://localhost:5173` and talks to the backend at `http://localhost:8000` by
+default. To point it at a different backend URL, copy `web/.env.example` to `web/.env`
+and set `VITE_API_URL`.
+
+The page is a single chat view: message history is resent with every request (the
+backend is stateless per request). The UI itself only shows the prose reply -- the
+underlying tool calls (name, arguments, full JSON result, `as_of`/`confidence`/
+`caveats`) are still returned by `/chat` and are what the terminal transcript
+(`python -m cli`) is for checking the "the model never produces a number" rule
+against, rather than the end-user chat view.
+
+If the backend is unreachable the UI shows an error banner naming the URL it tried,
+rather than failing silently. A request in flight can be cancelled with the Stop
+button, and times out client-side after 120s so a wedged backend never leaves the
+view animating forever.
+
+## Layout
+
+```
+ingest/     one module per source, over a shared TranStats form client
+scoring/    metrics.py builds the mart; score.py is pure scoring functions
+tools/      the seven agent tools, grouped by question type:
+              lookup       resolve free text to codes
+              ranking      compare airports against each other
+              diagnostics  explain one airport
+              traffic      descriptive route mix
+            data.py is the one cached reader of the mart and config
+agent/      the hand-rolled function-calling loop and system prompt
+api/        FastAPI wrapper over the loop
+web/        React chat view
+config/     scoring weights, regions, aliases, thresholds
+```
+

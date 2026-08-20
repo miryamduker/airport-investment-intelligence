@@ -9,7 +9,7 @@ from tools import format as f
 
 def rank_airports(region: str, profile: str, top_n: int) -> dict:
     """Score nationally, then filter by region -- never the other way round
-    (CLAUDE.md: "Never rank within a filtered subset"). Each row carries its
+    (AGENTS.md: "Never rank within a filtered subset"). Each row carries its
     own cohort label, since a mixed-cohort ranking is not comparable
     row-to-row.
     """

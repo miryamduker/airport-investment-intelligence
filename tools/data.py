@@ -102,7 +102,7 @@ CAVEAT_HUB_SIZE_ONE_MONTH = (
 )
 CAVEAT_CLASS_L_INCLUDED = (
     "Volume figures include CLASS='L' (non-scheduled/charter) passenger "
-    "traffic alongside scheduled service, per CLAUDE.md's passenger-service "
+    "traffic alongside scheduled service, per AGENTS.md's passenger-service "
     "filter -- see docs/LIMITATIONS.md."
 )
 CAVEAT_INVESTABILITY_FLOOR = (

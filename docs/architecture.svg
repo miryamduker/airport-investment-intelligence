@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="790" viewBox="0 0 880 790" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/>
+    </marker>
+  </defs>
+
+  <rect width="880" height="790" fill="#ffffff"/>
+
+  <!-- user -->
+  <rect x="360" y="16" width="160" height="32" rx="16" fill="#f3f4f6" stroke="#d1d5db"/>
+  <text x="440" y="37" text-anchor="middle" font-size="13" fill="#374151">User question</text>
+  <line x1="440" y1="48" x2="440" y2="70" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- web -->
+  <rect x="240" y="72" width="400" height="52" rx="8" fill="#f9fafb" stroke="#d1d5db"/>
+  <text x="440" y="95" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">React chat view</text>
+  <text x="440" y="113" text-anchor="middle" font-size="12" fill="#6b7280" font-family="ui-monospace, SFMono-Regular, Consolas, monospace">web/</text>
+  <line x1="440" y1="124" x2="440" y2="150" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="452" y="141" font-size="11" fill="#6b7280">POST /chat</text>
+
+  <!-- api -->
+  <rect x="240" y="152" width="400" height="52" rx="8" fill="#f9fafb" stroke="#d1d5db"/>
+  <text x="440" y="175" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">FastAPI</text>
+  <text x="440" y="193" text-anchor="middle" font-size="12" fill="#6b7280" font-family="ui-monospace, SFMono-Regular, Consolas, monospace">api/main.py</text>
+  <line x1="440" y1="204" x2="440" y2="234" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- LLM zone -->
+  <rect x="200" y="236" width="480" height="124" rx="12" fill="#fffbeb" stroke="#f59e0b" stroke-width="2"/>
+  <text x="220" y="261" font-size="11" font-weight="700" fill="#b45309" letter-spacing="0.5">LANGUAGE MODEL</text>
+  <text x="352" y="261" font-size="11" fill="#a16207">picks tools, writes prose, produces no numbers</text>
+  <rect x="232" y="274" width="416" height="72" rx="8" fill="#fde68a" stroke="#d97706"/>
+  <text x="440" y="298" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">Agent loop, hand-rolled function calling</text>
+  <text x="440" y="316" text-anchor="middle" font-size="12" fill="#78350f" font-family="ui-monospace, SFMono-Regular, Consolas, monospace">agent/loop.py</text>
+  <text x="440" y="334" text-anchor="middle" font-size="11" fill="#92400e">temperature 0 · max 8 tool iterations</text>
+
+  <!-- loop arrows -->
+  <line x1="380" y1="362" x2="380" y2="416" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="371" y="394" text-anchor="end" font-size="11" fill="#6b7280">tool call</text>
+  <line x1="500" y1="416" x2="500" y2="362" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="509" y="394" font-size="11" fill="#6b7280">JSON result</text>
+
+  <!-- deterministic zone -->
+  <rect x="200" y="420" width="480" height="300" rx="12" fill="#eff6ff" stroke="#3b82f6" stroke-width="2"/>
+  <text x="220" y="445" font-size="11" font-weight="700" fill="#1d4ed8" letter-spacing="0.5">DETERMINISTIC PYTHON</text>
+  <text x="378" y="445" font-size="11" fill="#2563eb">every number a user sees originates here</text>
+
+  <rect x="232" y="458" width="416" height="86" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+  <text x="440" y="482" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">Seven tools, grouped by question type</text>
+  <text x="440" y="502" text-anchor="middle" font-size="12" fill="#1e3a8a">lookup · ranking · diagnostics · traffic</text>
+  <text x="440" y="522" text-anchor="middle" font-size="11" fill="#1d4ed8">enum-constrained arguments · no SQL tool</text>
+  <line x1="440" y1="544" x2="440" y2="570" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <rect x="232" y="572" width="416" height="54" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+  <text x="440" y="595" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">Scoring engine, pure functions</text>
+  <text x="440" y="613" text-anchor="middle" font-size="12" fill="#1e3a8a" font-family="ui-monospace, SFMono-Regular, Consolas, monospace">scoring/score.py</text>
+  <line x1="440" y1="626" x2="440" y2="652" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <rect x="232" y="654" width="416" height="54" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+  <text x="440" y="677" text-anchor="middle" font-size="14" font-weight="600" fill="#111827" font-family="ui-monospace, SFMono-Regular, Consolas, monospace">mart_airport_metrics</text>
+  <text x="440" y="695" text-anchor="middle" font-size="12" fill="#1e3a8a">DuckDB over parquet · frozen at May 2026</text>
+
+  <!-- ingest -->
+  <line x1="440" y1="740" x2="440" y2="710" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <rect x="232" y="742" width="416" height="36" rx="8" fill="#f9fafb" stroke="#d1d5db"/>
+  <text x="440" y="765" text-anchor="middle" font-size="12" fill="#374151">ingest/ · BTS T-100 · BTS On-Time Performance · OurAirports</text>
+</svg>
