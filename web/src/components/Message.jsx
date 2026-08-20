@@ -1,5 +1,4 @@
 import ReactMarkdown from 'react-markdown'
-import ReasoningPanel from './ReasoningPanel'
 
 export default function Message({ message }) {
   const isUser = message.role === 'user'
@@ -15,10 +14,6 @@ export default function Message({ message }) {
             </div>
           )}
         </div>
-        {!isUser && message.asOf && message.toolCalls?.length > 0 && (
-          <div className="message-as-of">as of {message.asOf}</div>
-        )}
-        {!isUser && <ReasoningPanel toolCalls={message.toolCalls} />}
       </div>
     </div>
   )

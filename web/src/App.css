@@ -1,3 +1,19 @@
+:root {
+  --navy: #1c3a5e;
+  --navy-dark: #122843;
+  --navy-soft: #2f5680;
+  --navy-tint: #eaf0f6;
+  --silver: #aab4bd;
+  --silver-light: #e6e9ec;
+  --gold: #b8912f;
+  --gold-soft: #f6efd9;
+  --gold-border: #e2cd8f;
+  --bg: #f5f6f8;
+  --text: #1c2733;
+  --text-soft: #5b6672;
+  --border: #dde2e7;
+}
+
 .app {
   display: flex;
   flex-direction: column;
@@ -6,11 +22,13 @@
   margin: 0 auto;
   width: 100%;
   padding: 0 16px;
+  background: var(--bg);
+  color: var(--text);
 }
 
 .app-header {
-  padding: 16px 0 8px;
-  border-bottom: 1px solid #ddd;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
 }
 
 .app-header-title {
@@ -20,20 +38,16 @@
 }
 
 .app-logo {
-  height: 32px;
+  height: 44px;
   width: auto;
 }
 
 .app-header h1 {
-  font-size: 20px;
-  margin: 0 0 4px;
-}
-
-.app-subtitle {
+  font-size: 19px;
+  font-weight: 600;
   margin: 0;
-  font-size: 12px;
-  color: #666;
-  font-family: ui-monospace, Consolas, monospace;
+  color: var(--navy);
+  letter-spacing: 0.2px;
 }
 
 .message-list {
@@ -43,12 +57,6 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.empty-state {
-  color: #777;
-  font-size: 14px;
-  padding: 24px 0;
 }
 
 .message-row {
@@ -65,18 +73,20 @@
 
 .message-bubble {
   max-width: 80%;
-  border-radius: 8px;
-  padding: 10px 12px;
-  border: 1px solid #ddd;
+  border-radius: 10px;
+  padding: 10px 13px;
+  border: 1px solid var(--border);
 }
 
 .from-user .message-bubble {
-  background: #eef3ff;
-  border-color: #c9d8f5;
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
 }
 
 .from-assistant .message-bubble {
-  background: #f7f7f7;
+  background: #fff;
+  border-color: var(--border);
 }
 
 .message-content {
@@ -107,6 +117,7 @@
   font-size: 14px;
   font-weight: 600;
   margin: 14px 0 6px;
+  color: var(--navy);
 }
 
 .markdown-content ul,
@@ -128,123 +139,52 @@
 .markdown-content code {
   font-family: ui-monospace, Consolas, monospace;
   font-size: 12px;
-  background: #eee;
+  background: var(--silver-light);
   padding: 1px 4px;
   border-radius: 3px;
 }
 
 .markdown-content strong {
   font-weight: 600;
+  color: var(--navy);
 }
 
 .markdown-content blockquote {
   margin: 0 0 10px;
   padding-left: 10px;
-  border-left: 3px solid #ccc;
-  color: #555;
+  border-left: 3px solid var(--silver);
+  color: var(--text-soft);
 }
 
 .message-loading {
-  color: #777;
+  color: var(--text-soft);
   font-style: italic;
-}
-
-.message-as-of {
-  margin-top: 6px;
-  font-size: 11px;
-  color: #777;
-  font-family: ui-monospace, Consolas, monospace;
-}
-
-.reasoning-panel {
-  margin-top: 8px;
-  border-top: 1px dashed #ccc;
-  padding-top: 6px;
-}
-
-.reasoning-panel summary {
-  cursor: pointer;
-  font-size: 12px;
-  color: #444;
-  user-select: none;
-}
-
-.reasoning-body {
-  margin-top: 8px;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  align-items: center;
 }
 
-.tool-call {
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  padding: 8px;
-  background: #fff;
+.thinking-dots {
+  display: inline-flex;
+  margin-left: 2px;
 }
 
-.tool-call-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 4px;
+.thinking-dots .dot {
+  opacity: 0.25;
+  color: var(--gold);
+  font-weight: 700;
+  transition: opacity 0.2s ease;
 }
 
-.tool-call-name {
-  font-weight: 600;
-  font-size: 13px;
-  font-family: ui-monospace, Consolas, monospace;
-}
-
-.tool-call-args {
-  font-size: 12px;
-  color: #555;
-  background: #f0f0f0;
-  padding: 2px 6px;
-  border-radius: 4px;
-  word-break: break-all;
-}
-
-.tool-meta {
-  font-size: 12px;
-  background: #fffbe6;
-  border: 1px solid #f0e2a3;
-  border-radius: 4px;
-  padding: 6px 8px;
-  margin-bottom: 6px;
-}
-
-.tool-meta-row {
-  margin: 2px 0;
-}
-
-.tool-meta-label {
-  font-weight: 600;
-  font-family: ui-monospace, Consolas, monospace;
-}
-
-.tool-caveats {
-  margin: 4px 0 0;
-  padding-left: 18px;
-}
-
-.tool-call-result {
-  font-size: 12px;
-  background: #f4f3ec;
-  padding: 8px;
-  border-radius: 4px;
-  overflow-x: auto;
-  margin: 0;
-  font-family: ui-monospace, Consolas, monospace;
+.thinking-dots .dot-on {
+  opacity: 1;
 }
 
 .api-error {
   margin: 8px 0;
   padding: 10px 12px;
-  background: #fdecec;
-  border: 1px solid #f3b4b4;
-  color: #7a1f1f;
+  background: #fbeeee;
+  border: 1px solid #e3b8b8;
+  color: #7a2020;
   border-radius: 6px;
   font-size: 13px;
 }
@@ -259,15 +199,15 @@
 .suggested-question {
   font-size: 12px;
   padding: 6px 10px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--navy-soft);
   border-radius: 16px;
   background: #fff;
   cursor: pointer;
-  color: #333;
+  color: var(--navy);
 }
 
 .suggested-question:hover:not(:disabled) {
-  background: #f0f0f0;
+  background: var(--navy-tint);
 }
 
 .suggested-question:disabled {
@@ -279,7 +219,7 @@
   display: flex;
   gap: 8px;
   padding: 12px 0 16px;
-  border-top: 1px solid #ddd;
+  border-top: 1px solid var(--border);
 }
 
 .input-row textarea {
@@ -287,22 +227,52 @@
   font-family: inherit;
   font-size: 14px;
   padding: 8px 10px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border);
   border-radius: 6px;
   resize: none;
+  color: var(--text);
+}
+
+.input-row textarea:focus-visible {
+  border-color: var(--navy-soft);
+  outline: 2px solid var(--navy-soft);
+  outline-offset: 1px;
+}
+
+/* Keyboard users need to see where they are; the border-colour change alone
+   was too faint to serve as a focus indicator. */
+.suggested-question:focus-visible,
+.input-row button:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
 }
 
 .input-row button {
   padding: 0 18px;
-  border: 1px solid #333;
-  background: #1a1a1a;
+  border: 1px solid var(--navy);
+  background: var(--navy);
   color: #fff;
   border-radius: 6px;
   cursor: pointer;
   font-size: 14px;
 }
 
+.input-row button:hover:not(:disabled) {
+  background: var(--navy-dark);
+}
+
 .input-row button:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.input-row .stop-button {
+  border-color: var(--silver);
+  background: #fff;
+  color: var(--text-soft);
+}
+
+.input-row .stop-button:hover {
+  background: var(--silver-light);
+  color: var(--text);
 }
